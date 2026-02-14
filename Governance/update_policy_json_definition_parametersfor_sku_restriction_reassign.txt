@@ -1,0 +1,202 @@
+﻿<#
+.NOTES
+
+    THIS CODE-SAMPLE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED 
+
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR 
+
+    FITNESS FOR A PARTICULAR PURPOSE.
+
+    This sample is not supported under any Microsoft standard support program or service. 
+
+    The script is provided AS IS without warranty of any kind. Microsoft further disclaims all
+
+    implied warranties including, without limitation, any implied warranties of merchantability
+
+    or of fitness for a particular purpose. The entire risk arising out of the use or performance
+
+    of the sample and documentation remains with you. In no event shall Microsoft, its authors,
+
+    or anyone else involved in the creation, production, or delivery of the script be liable for 
+
+    any damages whatsoever (including, without limitation, damages for loss of business profits, 
+
+    business interruption, loss of business information, or other pecuniary loss) arising out of 
+
+    the use of or inability to use the sample or documentation, even if Microsoft has been advised 
+
+    of the possibility of such damages, rising out of the use of or inability to use the sample script, 
+
+    even if Microsoft has been advised of the possibility of such damages.
+
+    Script Name: update_policy_json_definition_parametersfor_sku_restriction_reassign.ps1
+    Description: Setup and Configuration:
+        Subscription and Resource Group: The script sets the subscription and resource group to be used.
+        Storage Account and Containers: It defines the storage account and containers for policy updates and SKU restrictions.
+        Context Setting:
+        Azure Context: The script sets the Azure context to the specified subscription and tenant.
+        SKU Selection:
+        Blocked SKUs: It retrieves a list of SKUs to block from the ‘eastus’ region and allows the user to select SKUs
+         to block using an interactive grid view.
+        Policy Definition:
+        Policy Parameters: Defines the parameters for the policy, including the list of excluded SKUs.
+        Policy Rule: Specifies the rule to deny the creation of virtual machines with the blocked SKUs.
+        Policy Definition: Creates a policy definition with the specified parameters and rule, and converts it to JSON for debugging.
+        Policy Creation:
+        New Policy: Creates a new policy definition in Azure with the name “RestrictSpecificSKUs”.
+        Policy Assignment:
+        Retrieve Policy: Retrieves the policy definition to be assigned.
+        Test/Validation: Validates the policy definition properties and outputs them for verification.
+        Remove Old Assignment: Attempts to remove any existing policy assignment for the specified policy.
+        Reassign Policy: Reassigns the policy definition to the subscription with the specified parameters and a non-compliance message.
+        This script ensures that specific SKUs are restricted from being used in the specified Azure subscription, 
+        enhancing governance and compliance
+
+#> 
+
+
+
+$subscriptionselected = 'wolffentpsub'
+
+connect-azaccount 
+
+################  Set up storage account and containers ################
+
+
+$resourcegroupname = 'DefaultResourceGroup-WUS'
+$subscriptioninfo = get-azsubscription -SubscriptionName $subscriptionselected 
+$TenantID = $subscriptioninfo | Select-Object tenantid
+ 
+
+
+
+# Set Azure context
+Set-AzContext -Subscription $($subscriptioninfo.Name) -Tenant $subscriptioninfo.TenantId
+
+# Get SKUs to block
+$blockedSkuList = Get-AzComputeResourceSku -Location 'eastus' | Select-Object -Unique Name, ResourceType | Sort-Object ResourceType, Name | Out-GridView -Title "Select SKUs to block:" -PassThru | Select-Object Name
+
+if ($blockedSkuList.Count -lt 1) {
+    Write-Warning "Nothing selected" -ErrorAction Stop
+} else {
+    # Define the policy parameters
+    $policyParameters = @{
+        "listofexcludedsks" = @{
+            "type" = "Array"
+            "metadata" = @{
+                "displayName" = "Excluded SKU types"
+                "description" = "Value of the SKU, such as Standard_Xasxxxx_vx"
+            }
+            "defaultValue" = $blockedSkuList.Name
+        }
+    }
+
+    # Define the policy rule
+    $policyRule = @{
+        "if" = @{
+            "allOf" = @(
+                @{
+                    "field" = "type"
+                    "equals" = "Microsoft.Compute/virtualMachines"
+                },
+                @{
+                    "field" = "Microsoft.Compute/virtualMachines/sku.name"
+                    "in" = "[parameters('listofexcludedsks')]"
+                }
+            )
+        }
+        "then" = @{
+            "effect" = "deny"
+        }
+    }
+
+    # Define the policy definition
+    $policyDefinition = @{
+        "properties" = @{
+            "displayName" = "Restrict Specific SKUs"
+            "description" = "This policy restricts the creation of specific SKUs."
+            "policyRule" = $policyRule
+            "parameters" = $policyParameters
+            "metadata" = @{
+                "category" = "Restrictions"
+            }
+        }
+    }
+
+    # Convert the policy definition to JSON
+    $policyDefinitionJson = $policyDefinition | ConvertTo-Json -Depth 10
+
+    # Output the JSON for debugging
+    Write-Output "Policy Definition JSON:"
+    Write-Output $policyDefinitionJson
+
+    # Create the new policy definition
+    New-AzPolicyDefinition -Name "RestrictSpecificSKUs" -Policy $policyDefinitionJson -Mode All
+
+    Write-Output "Policy created successfully."
+}
+
+
+
+
+
+#######################################################
+        ############## Apply updates to Policy parameters and reapply to Definition
+ 
+
+           $policytoassign = Get-AzPolicyDefinition -Name "RestrictSpecificSKUs" 
+
+        
+
+      ############## Test/ Validation Policy and values 
+
+
+          $policydefinitionproperties = Get-AzPolicyDefinition -Name "RestrictSpecificSKUs" -SubscriptionId $subscriptioninfo.Id  
+   
+          $policydefinitionproperties
+          $($policydefinitionproperties.metadata) | fl *
+
+   
+          write-host "$($policydefinitionproperties.metadata) " -ForegroundColor Green
+          write-host "$($policydefinitionproperties.parameter.listofexcludedsks.displayName) " -ForegroundColor Green
+          write-host "$($policydefinitionproperties.policyrule) " -ForegroundColor Green
+         write-host "$($policydefinitionproperties.description) " -ForegroundColor Green
+
+          $($policydefinitionproperties.parameter).listofexcludedsks.defaultvalue  
+
+
+
+
+        #####################################  Reassign subscription to update policy
+        ######### Remove old assignment on resource
+        try
+        {
+        
+        $PolicyAssignment = Get-AzPolicyAssignment  -PolicyDefinitionId $($policytoassign.id)
+        Remove-AzPolicyAssignment -Id $PolicyAssignment.id  -ErrorAction SilentlyContinue
+
+ 
+         ##################  Reassign Policydefinition
+ 
+         $listofexcludedsks  = @{'listofexcludedsks'=$($policydefinitionproperties.parameter).listofexcludedsks.defaultvalue  }
+
+         $assigntoscope =   New-AzPolicyAssignment -Name 'listofexcludedsks' -PolicyDefinition  $policytoassign  -PolicyParameterObject  $listofexcludedsks  -Scope  "/subscriptions/$($subscriptioninfo.Id)" -NonComplianceMessage @{Message="Stop making mistakes - I will find you"}
+        
+     }
+     catch
+     {
+        Write-host " Policy: $($policydefinitionproperties.displayname)  not assigned yet to any level ******"  -ForegroundColor Black -BackgroundColor white
+         
+
+     }
+
+
+
+ 
+ 
+
+
+
+
+
+

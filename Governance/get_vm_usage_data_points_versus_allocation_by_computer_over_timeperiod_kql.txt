@@ -1,0 +1,38 @@
+let TimePeriod = 730d; // Change this value to the desired time period, e.g., 24h, 7d, or any custom number of days
+let TimePeriodFormatted = strcat(tostring(TimePeriod / 1d), " days"); // Format the time period in a reader-friendly format
+let vmMetrics = materialize(
+    InsightsMetrics
+    | where Name == "UtilizationPercentage" and TimeGenerated >= ago(TimePeriod)
+    | summarize CPU_Utilization = avg(Val) by Computer
+);
+let vmDiskMetrics = materialize(
+    InsightsMetrics
+    | where Name == "FreeSpacePercentage" and TimeGenerated >= ago(TimePeriod)
+    | summarize Disk_Free_Space = avg(Val) by Computer
+);
+let vmMemoryMetrics = materialize(
+    InsightsMetrics
+    | where Name == "AvailableMB" and TimeGenerated >= ago(TimePeriod)
+    | summarize Memory_Available = avg(Val) by Computer
+);
+let vmAllocatedResources = materialize(
+    VMComputer
+    | summarize CPU_Allocated = avg(Cpus), Memory_Allocated = avg(PhysicalMemoryMB) by Computer
+);
+let diskSummary = materialize(
+    InsightsMetrics
+    | where Name == "FreeSpacePercentage" and TimeGenerated >= ago(TimePeriod)
+    | summarize avg_Disk_Free_Space = avg(Val) by Computer
+);
+let avgDiskSpaceUsed = materialize(
+    InsightsMetrics
+    | where Name == "FreeSpacePercentage" and TimeGenerated >= ago(TimePeriod)
+    | summarize avg_Disk_Space_Used = 100 - avg(Val) by Computer
+);
+vmAllocatedResources
+| join kind=inner (vmMetrics) on Computer
+| join kind=inner (vmDiskMetrics) on Computer
+| join kind=inner (vmMemoryMetrics) on Computer
+| join kind=inner (diskSummary) on Computer
+| join kind=inner (avgDiskSpaceUsed) on Computer
+| summarize by Computer, TimePeriodFormatted, CPU_Allocated, CPU_Utilization, Disk_Free_Space, avg_Disk_Free_Space, avg_Disk_Space_Used, Memory_Allocated, Memory_Available

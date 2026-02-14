@@ -1,0 +1,34 @@
+"Devicecount","DeviceAccountEnabled","AlternativeSecurityIds","ApproximateLastLogonTimeStamp","ComplianceExpiryTime","DeviceDeletionTimestamp","DeviceId","DeviceMetadata","DeviceObjectVersion","DeviceOSType","DeviceOSVersion","DevicePhysicalIds","DeviceTrustType","UserDirSyncEnabled","DeviceDisplayName","IsCompliant","IsManaged","DeviceLastDirSyncTime","DeviceObjectId","DeviceObjectType","ProfileType","SystemLabels","AgeGroup","AssignedLicenses","AssignedPlans","City","CompanyName","ConsentProvidedForMinor","Country","CreationType","DeletionTimestamp","Department","DirSyncEnabled","DisplayName","ExtensionProperty","FacsimileTelephoneNumber","GivenName","ImmutableId","IsCompromised","JobTitle","LastDirSyncTime","LegalAgeGroupClassification","Mail","MailNickName","Mobile","ObjectId","ObjectType","OnPremisesSecurityIdentifier","OtherMails","PasswordPolicies","PasswordProfile","PhysicalDeliveryOfficeName","PostalCode","PreferredLanguage","ProvisionedPlans","ProvisioningErrors","ProxyAddresses","RefreshTokensValidFromDateTime","ShowInAddressList","SignInNames","SipProxyAddress","State","StreetAddress","Surname","TelephoneNumber","UsageLocation","UserPrincipalName","UserState","UserStateChangedOn","UserType"
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","gerald wolff",,,"gerald",,,,,,,,,,,,,,"{
+}",,,,,,,,,,,,,"wolff",,,"cifs_StorageAccountName.file.core.windows.net@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","gerald.wolff@outlook.com",,,"Gerald",,,"Devils spawn",,,"gerald.wolff@outlook.com",,,,,,,,"{
+}",,,,,,,,,,,,,"Wolff",,,"gerald.wolff_outlook.com#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","System Administrator",,,,,,,,,"geraldwolff@wolffentp.com",,,,,,,,"{
+}",,,,,,,,,,,,,,,,"geraldwolff_wolffentp.com#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,
+"5","True",,"06/29/2025 02:16:23",,,"60945c99-5d7d-49a1-9c9e-fff93562351d",,"2","Windows","10.0.22621.1992","4","Workplace",,"WolffMSlenovo",,,,"d550c891-c9fd-44ac-a157-674eddb8a3ed","Device","RegisteredDevice",,,,"",,,,,,,,,"geraldwolff",,,,,,,,,"geraldwolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,,,,"geraldwolff@wolffentp.org",,,
+"5","True",,"07/08/2025 18:25:21",,,"9cbaaba5-6b2d-4c67-9841-198e200b5e52",,"2","Android","13","0","Workplace",,"samsungSM-S901U",,,,"976ee151-c5c0-40b8-8a80-2af070a50d38","Device","RegisteredDevice",,,,"",,,,,,,,,"geraldwolff",,,,,,,,,"geraldwolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,,,,"geraldwolff@wolffentp.org",,,
+"5","True",,"07/09/2025 13:47:09",,,"016c03b8-554b-4b58-85d4-e6c893d0f37d",,"2","Windows","10.0.22631.3155","4","AzureAd",,"wolfflenovo","False","True",,"f4a5f7c8-26e6-47f5-ac30-b02d1f9e4b49","Device","RegisteredDevice",,,,"",,,,,,,,,"geraldwolff",,,,,,,,,"geraldwolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,,,,"geraldwolff@wolffentp.org",,,
+"5","True",,"07/01/2025 22:44:56",,,"cfde13c2-6fcf-48ff-b479-5b491c66c1b6",,"2","Android","14","0","Workplace",,"samsungSM-X710",,,,"298e095d-a0bc-4288-b5f4-70d40956782a","Device","RegisteredDevice",,,,"",,,,,,,,,"geraldwolff",,,,,,,,,"geraldwolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,,,,"geraldwolff@wolffentp.org",,,
+"5","True",,"11/21/2024 07:56:01",,,"382d0a0a-9358-49c2-8ce6-50def18051f6",,"2","Windows","10.0.20348.2849","4","Workplace",,"wolfffsvm01",,,,"22922ecf-be04-4c63-8949-1ff19775695e","Device","RegisteredDevice",,,,"",,,,,,,,,"geraldwolff",,,,,,,,,"geraldwolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,,,,"geraldwolff@wolffentp.org",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","jerry wolff",,,"jerry",,,"me lord of the underworld",,,"jerrywolff@wolffentp.org",,,,,,,,"{
+}",,,"en-US",,,,,,,,,,"wolff",,,"jerrywolff@wolffentp.org",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","jwgmpi@gmail.com",,,,,,,,,"jwgmpi@gmail.com",,,,,,,,"{
+}",,,,,,,,,,,,,,,,"jwgmpi_gmail.com#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","jwgmpi",,,,,,,,,,,,,,,,,"{
+}",,,,,,,,,,,,,,,,"jwgmpi@wolffentp.org",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","jwgmpi",,,,,,,,,"jwgmpi@comcast.net",,,,,,,,"{
+}",,,,,,,,,,,,,,,,"jwgmpi_comcast.net#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","jwolffadmin@wolffentp.org",,,"gerald",,,,,,"jwolffadmin@wolffentp.org",,,,,,,,"{
+}",,,,,,,,,,,,,"wolff",,,"jwolffadmin@wolffentp.org",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","On-Premises Directory Synchronization Service Account",,,,,,,,,,,,,,,,,"{
+}",,,,,,,,,,,,,,,,"Sync_wolffaddc01_db45b753dcd2@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","wolff.brett.123@gmail.com",,,,,,,,,"wolff.brett.123@gmail.com",,,,,,,,"{
+}",,,,,,,,,,,,,,,,"wolff.brett.123_gmail.com#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,
+"0","NA",,"NA","NA","NA","NA","NA","NA","NA","NA","NA","NA",,"NA","NA","NA","NA","NA","NA","NA","NA",,,"",,,,,,,,"NA","wolfffilms@gmail.com",,,,,,,,,"wolfffilms@gmail.com",,,,,,,,"{
+}",,,,,,,,,,,,,,,,"wolfffilms_gmail.com#EXT#@MngEnvMCAP741258.onmicrosoft.com",,,

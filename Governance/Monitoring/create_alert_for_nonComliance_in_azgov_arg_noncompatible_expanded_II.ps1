@@ -1,0 +1,197 @@
+﻿<#
+.NOTES
+
+    THIS CODE-SAMPLE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED 
+
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR 
+
+    FITNESS FOR A PARTICULAR PURPOSE.
+
+    This sample is not supported under any Microsoft standard support program or service. 
+
+    The script is provided AS IS without warranty of any kind. Microsoft further disclaims all
+
+    implied warranties including, without limitation, any implied warranties of merchantability
+
+    or of fitness for a particular purpose. The entire risk arising out of the use or performance
+
+    of the sample and documentation remains with you. In no event shall Microsoft, its authors,
+
+    or anyone else involved in the creation, production, or delivery of the script be liable for 
+
+    any damages whatsoever (including, without limitation, damages for loss of business profits, 
+
+    business interruption, loss of business information, or other pecuniary loss) arising out of 
+
+    the use of or inability to use the sample or documentation, even if Microsoft has been advised 
+
+    of the possibility of such damages, rising out of the use of or inability to use the sample script, 
+
+    even if Microsoft has been advised of the possibility of such damages.
+ Purpose : 
+ The script method for creating alerts for noncompliance in Azure Government is necessary due to the 
+ differences in capabilities and features between Azure Government and Azure Commercial. In Azure 
+ Commercial, you can use the Azure Resource Graph query to directly create alerts based on the query 
+ results. This is because Azure Commercial supports more advanced and integrated features for querying 
+ and alerting.
+
+However, in Azure Government, certain features and integrations available in Azure Commercial may not be
+ fully supported or available. Therefore, using a script to manually create and deploy activity log alerts
+  ensures that you can achieve the same functionality by leveraging the available tools and APIs in Azure
+   Government. The script method provides a way to automate the creation of alerts, ensuring compliance 
+   monitoring and alerting are in place even when direct query-based alert creation is not supported.
+
+In summary, the script method is necessary in Azure Government to work around the limitations and 
+differences in feature availability compared to Azure Commercial, ensuring that compliance monitoring and 
+alerting can still be effectively implemented.
+Description:
+The script is designed to create and deploy an Azure Activity Log Alert for non-compliant resources within 
+ a specified subscription and resource group. It retrieves the subscription details, sets the Azure context, 
+  defines the resource group and action group names, and creates an action group email receiver. 
+  The script then constructs a JSON template for the alert, converts it to JSON format, saves it to a file, 
+  and deploys the template using the New-AzResourceGroupDeployment cmdlet.
+
+Actions:
+Retrieve Subscription Details:
+
+Uses Get-AzSubscription to retrieve subscription details based on the provided Tenant ID and Subscription ID.
+Set Azure Context:
+
+Sets the Azure context to the specified subscription using Set-AzContext.
+Define Resource Group and Action Group Names:
+
+Defines the names for the resource group and action group.
+Create Action Group Email Receiver:
+
+Creates an email receiver object for the action group using New-AzActionGroupEmailReceiverObject.
+Construct JSON Template:
+
+Constructs a JSON template for the activity log alert, including parameters, variables, and resources.
+Convert to JSON and Save to File:
+
+Converts the constructed template and parameters to JSON format and saves them to files.
+Deploy the Template:
+
+Deploys the JSON template using the New-AzResourceGroupDeployment cmdlet.
+#>
+
+# Connect to Azure account in the AzureUSGovernment environment
+$context = Connect-AzAccount -Environment AzureUSGovernment `
+-Subscription 639cd93f-befc-4729-ae4c-df719077200c `
+-UseDeviceAuthentication
+
+# Retrieve the subscription details
+$sub = Get-AzSubscription -TenantId 40a3c411-b2a7-4f7b-a28e-05bf8dd7ab7b -SubscriptionId 639cd93f-befc-4729-ae4c-df719077200c
+
+# Set the Azure context with the correct parameter name
+Set-AzContext -SubscriptionId $sub.Id
+
+# Define the resource group and action group names
+$resourceGroupName = "wolffgovmgmt"
+$actionGroupName = "wolffazovactiongrp"
+
+$actiongroup = Get-AzActionGroup -SubscriptionId $sub.Id | Where-Object { $_.Name -eq $actionGroupName }
+
+$emailReceiver = "jerrywolff@microsoft.com"
+$receivername = New-AzActionGroupEmailReceiverObject -EmailAddress $emailReceiver -Name $emailReceiver
+
+$scope = "/subscriptions/$($sub.Id)"
+$alertname = "wolffpolicy_upd_for_noncompliancy"
+
+$alertparam = @{
+    "$schema" = "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#"
+    "contentVersion" = "1.0.0.0"
+    "parameters" = @{
+        "activitylogalerts_$($alertname)_name" = @{
+            "value" = $null
+        }
+        "actiongroups_$($actionGroupName)_externalid" = @{
+            "value" = $null
+        }
+    }
+}
+
+$alerttemplate = @"
+{
+    "`$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "activitylogalerts_$($alertname)_name": {
+            "defaultValue": "$($alertname)",
+            "type": "String"
+        },
+        "actiongroups_$($actionGroupName)_externalid": {
+            "defaultValue": "/subscriptions/$($sub.Id)/resourceGroups/$($resourceGroupName)/providers/microsoft.insights/actiongroups/$($actionGroupName)",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "microsoft.insights/activitylogalerts",
+            "apiVersion": "2020-10-01",
+            "name": "[parameters('activitylogalerts_$($alertname)_name')]",
+            "location": "global",
+            "properties": {
+                "scopes": [
+                    "/subscriptions/$($sub.id)"
+                ],
+                "condition": {
+                    "allOf": [
+                        {
+                            "field": "category",
+                            "equals": "Administrative"
+                        },
+                        {
+                            "field": "operationName",
+                            "equals": "Microsoft.PolicyInsights/policyStates/triggerEvaluation/action"
+                        },
+                        {
+                            "field": "operationName",
+                            "equals": "Microsoft.PolicyInsights/policyStates/queryResults/action"
+                        },
+                        {
+                            "field": "operationName",
+                            "equals": "Microsoft.PolicyInsights/policyStates/summarize/action"
+                        },
+                        {
+                            "field": "operationName",
+                            "equals": "MICROSOFT.AUTHORIZATION/POLICIES/AUDIT/ACTION"
+                        }
+                    ]
+                },
+                "actions": {
+                    "actionGroups": [
+                        {
+                            "actionGroupId": "[parameters('actiongroups_$($actionGroupName)_externalid')]",
+                            "webhookProperties": {}
+                        }
+                    ]
+                },
+                "enabled": true,
+                "description": "non-compliant /subscriptions/$($sub.id) resources"
+            }
+        }
+    ]
+}
+"@
+ 
+
+
+# Convert the hashtable to JSON and save it to a file
+$alerttemplateJson = $alerttemplate  
+$alertparamJson = $alertparam | ConvertTo-Json  
+
+# Save the JSON to files
+$alerttemplateJson | Out-File c:\temp\noncompliancetemplate.json -Encoding unicode
+$alertparamJson | Out-File c:\temp\noncomplianceparam.json -Encoding unicode
+
+# Deploy the template
+New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFile "c:\temp\noncompliancetemplate.json" #-TemplateParameterFile c:\temp\noncomplianceparam.json
+
+
+
+
+
+
+

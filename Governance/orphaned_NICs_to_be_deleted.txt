@@ -1,0 +1,249 @@
+﻿ <#
+    .SYNOPSIS  
+     Wrapper script fororphaned_NICs_to_be_deleted.ps1
+    .DESCRIPTION  
+     Wrapper script fororphaned_NICs_to_be_deleted.ps1
+    .EXAMPLE  
+    .\orphaned_NICs_to_be_deleted.ps1
+    Version History  
+    v1.0   - Initial Release  
+ 
+
+.NOTES
+
+    THIS CODE-SAMPLE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED 
+
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR 
+
+    FITNESS FOR A PARTICULAR PURPOSE.
+
+    This sample is not supported under any Microsoft standard support program or service. 
+
+    The script is provided AS IS without warranty of any kind. Microsoft further disclaims all
+
+    implied warranties including, without limitation, any implied warranties of merchantability
+
+    or of fitness for a particular purpose. The entire risk arising out of the use or performance
+
+    of the sample and documentation remains with you. In no event shall Microsoft, its authors,
+
+    or anyone else involved in the creation, production, or delivery of the script be liable for 
+
+    any damages whatsoever (including, without limitation, damages for loss of business profits, 
+
+    business interruption, loss of business information, or other pecuniary loss) arising out of 
+
+    the use of or inability to use the sample or documentation, even if Microsoft has been advised 
+
+    of the possibility of such damages, rising out of the use of or inability to use the sample script, 
+
+    even if Microsoft has been advised of the possibility of such damages.
+
+Description : 
+    This PowerShell script is designed to identify and remove orphaned network interfaces (NICs) 
+    in Azure. It connects to Azure using managed identity, retrieves all subscriptions, and for each 
+    subscription, it identifies NICs that are not associated with any virtual machine. The script then
+     exports details of these orphaned NICs to a CSV file, attempts to remove them, and logs the results 
+     of the deletion process.
+
+    Processing Flow:
+    Connect to Azure: The script starts by connecting to Azure using managed identity with connect-azaccount
+     -identity.
+    Clear Previous Data: It clears the contents of the CSV file c:\temp\orphaned_NICS_to_be_removed.csv
+     to ensure no old data is present.
+    Retrieve Subscriptions: It retrieves all Azure subscriptions using get-azsubscription.
+    Iterate Through Subscriptions: For each subscription:
+    Set the context to the current subscription using Set-azContext -Subscription $Sub.name.
+    Retrieve all NICs that are not associated with any virtual machine using Get-azNetworkInterface 
+    | where-object virtualmachine -eq $null.
+    Process Each Orphaned NIC: For each orphaned NIC:
+    Retrieve detailed information about the NIC.
+    Extract the public IP address and other relevant details.
+    Create a PowerShell object with NIC details and export it to c:\temp\orphaned_NICS_to_be_removed.csv.
+    Attempt to remove the NIC using Remove-azNetworkInterface -Verbose -force -ErrorAction Ignore.
+    Log the deletion status and export the details to c:\temp\orphaned_NICS_removed.csv.
+    Generate HTML Reports: After processing all NICs:
+    Import the CSV files and convert the data to HTML format.
+    Save the HTML reports to c:\temp\orphaned_NICS_to_be_removed.html and c:\temp\orphaned_NICS_removed.html.
+    Open the HTML reports using invoke-item.
+    This script ensures that orphaned NICs are identified, logged, and removed efficiently, with detailed reports 
+    generated for auditing purposes
+
+
+
+#>
+
+
+connect-azaccount -identity
+
+ 
+
+ Clear-Content "c:\temp\orphaned_NICS_to_be_removed.csv"
+				  
+            $subs  = get-azsubscription 
+            
+ 
+foreach($sub in $subs)
+{		 
+     Set-azContext  -Subscription $Sub.name
+ 
+   
+            $nics =	 Get-azNetworkInterface    | where-object virtualmachine -eq $null
+            $nics
+        
+
+        foreach($nicresource in  $nics)
+         {
+
+
+             
+              $orphanednics =   Get-azNetworkInterface   -ResourceGroupName $($nicresource.resourcegroupname) -Name $($nicresource.Name) #| Remove-azNetworkInterface -Verbose -force
+                
+                 foreach($orphanednic in $orphanednics)
+                {
+                    
+            
+                        $PIP = $(($orphanednic | Select-Object -expandproperty Ipconfigurations).PublicIpAddress).ipaddress
+
+                            $NICobj = New-Object PSOBject 
+
+                            $NICobj | add-member ResourceGroupName "$($orphanednic.ResourceGroupName)"
+                            $NICobj | add-member Location "$($orphanednic.Location)"
+                            $NICobj | add-member VirtualMachine "$($orphanednic.VirtualMachine)"
+                            $NICobj | add-member PrivateIP "$(($orphanednic  | Select-Object -expandproperty Ipconfigurations).PrivateIpAddress)"
+                            $NICobj | add-member DnsSettings "$($orphanednic.DnsSettings.DnsServers)"
+                            $NICobj | add-member NetworkSecurityGroup "$($orphanednic.NetworkSecurityGroup)"
+                            $NICobj | add-member Primary "$($orphanednic.Primary)"
+                            $NICobj | add-member EnableIPForwarding "$($orphanednic.EnableIPForwarding)" 
+                            $NICobj | add-member Name "$($orphanednic.Name)" 
+                            $NICobj | add-member PublicIpAddress "$PIP"   
+                            $NICobj | add-member Tags "$($orphanednic.Etag.Values)"   
+                            $NICobj | add-member EnableAcceleratedNetworking "$($orphanednic.EnableAcceleratedNetworking)"
+                                               
+                                $NICobj | export-csv "c:\temp\orphaned_NICS_to_be_removed.csv" -append -notypeinformation
+
+                               
+
+                         $NICdobj = New-Object PSOBject 
+
+                                    $NICdobj | add-member ResourceGroupName "$($orphanednic.ResourceGroupName)"
+                                    $NICdobj | add-member Location "$($orphanednic.Location)"
+                                    $NICdobj | add-member VirtualMachine "$($orphanednic.VirtualMachine)"
+                                    $NICdobj | add-member PrivateIP "$(($orphanednic  | Select-Object -expandproperty Ipconfigurations).PrivateIpAddress)"
+                                    $NICdobj | add-member DnsSettings "$($orphanednic.DnsSettings.DnsServers)"
+                                    $NICdobj | add-member NetworkSecurityGroup "$($orphanednic.NetworkSecurityGroup)"
+                                    $NICdobj | add-member Primary "$($orphanednic.Primary)"
+                                    $NICdobj | add-member EnableIPForwarding "$($orphanednic.EnableIPForwarding)" 
+                                    $NICdobj | add-member Name "$($orphanednic.Name)" 
+                                    $NICdobj | add-member PublicIpAddress "$PIP"   
+                                    $NICdobj | add-member Tags "$($orphanednic.Etag.Values)"   
+                                    $NICdobj | add-member EnableAcceleratedNetworking "$($orphanednic.EnableAcceleratedNetworking)"
+                                    $NICdobj | add-member Status "Deleted/to Delete"                                               
+                               
+                                $NICdobj | export-csv "c:\temp\orphaned_NICS_removed.csv" -append -notypeinformation
+
+########################### uncommment this section if you are comfortable automatically removing orphnaed Public IP s ############
+<#
+                                if(!($orphaneddeleted =   $orphanednic  | Remove-azNetworkInterface -Verbose -force -ErrorAction Ignore))
+                                {
+
+                                    write-host " Error occurred due to access rights or association with private endpoint" -BackgroundColor white -ForegroundColor DarkRed
+
+                                }
+               #>
+
+                    }
+            }
+
+    }
+        
+
+
+
+     $CSS = @"
+<Title>Ophaned NEtwork Interface Objects to be deleted Report:$(Get-Date -Format 'dd MMMM yyyy' )</Title>
+<Style>
+th {
+	font: bold 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+	sans-serif;
+	color: #FFFFFF;
+	border-right: 1px solid #C1DAD7;
+	border-bottom: 1px solid #C1DAD7;
+	border-top: 1px solid #C1DAD7;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	text-align: left;
+	padding: 6px 6px 6px 12px;
+	background: #5F9EA0;
+}
+td {
+	font: 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+	sans-serif;
+	border-right: 1px solid #C1DAD7;
+	border-bottom: 1px solid #C1DAD7;
+	background: #fff;
+	padding: 6px 6px 6px 12px;
+	color: #6D929B;
+}
+</Style>
+"@
+
+
+
+
+
+
+$deletionaudit = import-csv "c:\temp\orphaned_NICS_to_be_removed.csv" 
+
+(($deletionaudit | Select  ResourceGroupName, @{Name='VirtualMachine';E={IF ($_.VirtualMachine -eq ''){'Ophaned to be deleted'}Else{$_.VirtualMachine}}},PrivateIP , DnsSettings,NetworkSecurityGroup ,Primary , EnableIPForwarding, Name,PublicIpAddress ,Tags,EnableAcceleratedNetworking |`
+  ConvertTo-Html -Head $CSS ).replace('Ophaned to be deleted','<font color=red>Ophaned to be deleted</font>'))   | out-file  "c:\temp\orphaned_NICS_to_be_removed.html"
+invoke-item "c:\temp\orphaned_NICS_to_be_removed.html"
+ 
+
+ $deletionresults = import-csv "c:\temp\orphaned_NICS_removed.csv" 
+
+(($deletionresults | Select  ResourceGroupName, @{Name='VirtualMachine';E={IF ($_.VirtualMachine -eq ''){'Ophaned to be deleted'}Else{$_.VirtualMachine}}},PrivateIP , DnsSettings,NetworkSecurityGroup ,Primary , EnableIPForwarding, Name,PublicIpAddress ,Tags,EnableAcceleratedNetworking, Status |`
+  ConvertTo-Html -Head $CSS ).replace('Deleted/to Delete','<font color=Green>Deleted/to Delete</font>'))   | out-file  "c:\temp\orphaned_NICS_removed.html"
+invoke-item "c:\temp\orphaned_NICS_removed.html"
+ 
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

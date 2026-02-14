@@ -1,0 +1,212 @@
+﻿
+
+########### Variable settings ########################################
+
+#Define parameters
+$resourceGroupName = "wolffextensionrg" 
+$storageAccountName = "wolffextensionsa" 
+$keyvaultrg = "adminrg" 
+$keyvault = "wolffkv" 
+$extensionName = "KeyVaultForWindows" 
+
+$subscontext = (connect-azaccount -identity).Context
+
+$subscriptions = Get-AzSubscription -SubscriptionName "wolffentpsub"
+set-azcontext -subscription $($subscriptions.name)
+
+
+########################################################################## $loginContext = Connect-AzAccount -Identity
+
+$certificateAuth = "wolffcertII"
+
+az login --identity --scope https://management.core.windows.net//.default
+ 
+##################  Create and add certificate to keyvault ###################################
+$Policy = New-AzKeyVaultCertificatePolicy -SecretContentType "application/x-pkcs12" -SubjectName "CN=wolffentp.org" -IssuerName "Self" -ValidityInMonths 6 -ReuseKeyOnRenewal
+
+Add-AzKeyVaultCertificate -VaultName "$keyvault" -Name "$certificateAuth" -CertificatePolicy $Policy -Verbose
+Get-AzKeyVaultCertificate -VaultName "$keyvault" -Name "$certificateAuth"
+
+####################################
+
+foreach ($sub in $subscriptions) {
+ $subContext = Set-AzContext -Subscription $($sub.Name)
+
+
+
+$certKeyVault = Get-AzKeyVault -VaultName "$keyvault" -ResourceGroupName "$keyvaultrg" -SubscriptionId $($subContext.Subscription.Id)
+
+# Retrieve certificate
+$certificate = Get-AzKeyVaultCertificate -VaultName $($certKeyVault.VaultName) -Name $certificateAuth
+
+   $Settings = @{
+                    secretsManagementSettings = @{
+                        pollingIntervalInS = "2628000" # every Month
+                        linkOnRenewal = $true
+                        requireInitialSync = $true
+                        observedCertificates = @(
+                            @{
+                                url = "https://$($certKeyVault.VaultName).vault.azure.net/secrets/$($certificate.Name)"
+                                certificateStoreName = "MY"
+                                certificateStoreLocation = "LocalMachine"
+                                accounts = @("Network Service", "Local Service")
+                            }
+                        )
+                    }
+                    authenticationSettings = @{
+                        msiEndpoint = "http://localhost:40342/metadata/identity"
+                        msiClientId = "c7373ae5-91c2-4165-8ab6-7381d6e75619"
+                    }
+                }
+
+
+
+
+    $arcMachines = Get-AzConnectedMachine  | where-object { $_.name -ne "Kellylenovo" } 
+    $arcMachines
+
+    foreach($vm in $arcMachines)
+     {
+        Write-Host "Checking $($vm.Name)" -ForegroundColor Red -BackgroundColor White
+ 
+        $extensionInfo = Get-AzConnectedMachineExtension -ResourceGroupName $($vm.ResourceGroupName) -machinename $($vm.Name) | Where-Object { $_.Name -eq "$extensionName" }
+        $extensionInfo
+
+        if ($extensionInfo -ne $null) {
+                    $typeHandlerVersion = "$($extensionInfo.TypeHandlerVersion)"
+       
+
+                  Write-Host "$($extensionInfo.Name) $($extensionInfo.Publisher) $($extensionInfo.Version) $($extensionInfo.TypeHandlerVersion)" -ForegroundColor Cyan
+
+                     # Re-add and run extension
+                if ($extensionInfo -ne $null) 
+                {
+                    Set-AzConnectedMachineExtension -ResourceGroupName "$($vm.ResourceGroupName)" `
+                        -Location "$($vm.Location)" `
+                        -MachineName "$($vm.Name)" `
+                        -Name "$($extensionInfo.Name)" `
+                        -Publisher "$($extensionInfo.Publisher)" `
+                        -ExtensionType "KeyVaultForWindows" `
+                        -Settings $Settings `
+                        -ForceRerun "true" 
+                } 
+     
+            }
+            else
+            {                                                                                                                                                                        if ($extensionInfo -eq $null) {
+                Write-Host "$extensionName is not present on $($vm.Name) - Adding" -ForegroundColor Black -BackgroundColor White
+
+                # Get the latest extension details
+                $latestExtension = az vm extension image list `
+                    --location $($vm.Location) `
+                    --query "[?name=='$extensionName'] | sort_by(@, &version) | [-1]" `
+                    --output json | ConvertFrom-Json
+
+                if ($latestExtension -ne $null) {
+                    $publisher = $latestExtension.publisher
+                    $version = $latestExtension.version
+
+                    # Get detailed information about the extension
+                    $extensionDetails = az vm extension image show `
+                        --location $($vm.Location) `
+                        --publisher $publisher `
+                        --name $extensionName `
+                        --version $version `
+                        --output json | ConvertFrom-Json
+
+                    if ($extensionDetails -ne $null) {
+                        # Extract the extension type from the id property
+                        $extensionType = ($extensionDetails.id -split '/Types/') -split '/Versions/'
+
+                        # Create a new PSObject to store the extension information
+                        $extensionInfoObj = New-Object PSObject
+                        $extensionInfoObj | Add-Member -MemberType NoteProperty -Name Name -Value $extensionName
+                        $extensionInfoObj | Add-Member -MemberType NoteProperty -Name Publisher -Value $publisher
+                        $extensionInfoObj | Add-Member -MemberType NoteProperty -Name TypeHandlerVersion -Value $typeHandlerVersion
+                        $extensionInfoObj | Add-Member -MemberType NoteProperty -Name ExtensionType -Value $($extensionType)
+
+                        $extensionInfo = $extensionInfoObj
+
+                        # Add the extension to the VM
+                        New-AzConnectedMachineExtension -ResourceGroupName $($vm.ResourceGroupName) `
+                            -MachineName $($vm.Name) `
+                            -Name "KeyVaultForWindows" `
+                            -Location $($vm.Location) `
+                            -Publisher "Microsoft.Azure.KeyVault" `
+                            -ExtensionType "KeyVaultForWindows" `
+                            -Setting $Settings
+
+                        ### test addition to VM 
+                        $extensionInfo = Get-AzConnectedMachineExtension -ResourceGroupName $($vm.ResourceGroupName) -machinename $($vm.Name) | Where-Object { $_.Name -eq "$extensionName" }
+                        $extensionInfo
+                        
+
+                        ### set after addition to VM 
+                        if ($extensionInfo -ne $null)
+                        {
+                           Set-AzConnectedMachineExtension -ResourceGroupName "$($vm.ResourceGroupName)" `
+                            -Location "$($vm.Location)" `
+                            -MachineName "$($vm.Name)" `
+                            -Name "$($extensionInfo.Name)" `
+                            -Publisher "$($extensionInfo.Publisher)" `
+                            -ExtensionType "KeyVaultForWindows" `
+                            -Settings $Settings `
+                        
+
+                      } #### ## new Extensioninfo end 
+                      else 
+                      {
+                        Write-Host "Failed to retrieve extension details." -ForegroundColor Red
+                      }
+              } ### no extension and new details $extensionDetails end 
+              
+              else {
+                Write-Host "Failed to retrieve the latest extension." -ForegroundColor Red -BackgroundColor white
+              }
+          }
+        }
+    }
+
+    }  #### foreach vm end 
+
+} #### foreach sub end 
+
+    $arcMachines = Get-AzConnectedMachine # -Name WolffMSlenovo -ResourceGroupName jwgovernance
+    $arcMachines
+
+
+
+
+  $extensionData = ''
+# Loop through each virtual machine and get its extensions
+foreach ($vm in $arcMachines ) {
+    $vmName = $($vm.Name)
+    $resourceGroup = $($vm.ResourceGroupName)
+    $extensions = Get-AzConnectedMachineextension   -ResourceGroupName $resourceGroup -machinename $vmName  
+    foreach ($extension in $extensions) {
+        $extensionobj = new-object PSOBject
+
+        $extensionobj | Add-Member -MemberType NoteProperty -name vmname   -value $vmName
+        $extensionobj | Add-Member -MemberType NoteProperty -name  ExtensionName  -value $($extension.Name)
+        $extensionobj | Add-Member -MemberType NoteProperty -name Publisher   -value   $($extension.Publisher)      
+        $extensionobj | Add-Member -MemberType NoteProperty -name Version    -value   $($extension.Version)      
+        $extensionobj | Add-Member -MemberType NoteProperty -name ProvisioningState   -value $($extension.ProvisioningState)        
+        
+       
+        [array]$extensionData += $extensionobj
+
+        }
+    }
+ 
+
+# Display the extension data in a table
+$extensionData  | ft -AutoSize
+
+ 
+
+
+
+
+
+
+

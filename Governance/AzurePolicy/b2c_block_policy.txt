@@ -1,0 +1,16 @@
+{
+  "properties": {
+    "displayName": "Restrict B2C Tenant Creation",
+    "description": "Prevents non-admin users from creating Azure AD B2C tenants.",
+    "mode": "All",
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "equals": "Microsoft.AzureActiveDirectory/b2cDirectories"
+      },
+      "then": {
+        "effect": "Deny",
+      }
+    }
+  }
+}

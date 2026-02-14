@@ -1,0 +1,147 @@
+﻿
+### uncomment when using for AAzure Automation
+ connect-azaccount   -Identity
+ set-azcontext -Subscription 'wolffentpsub'
+
+###########
+import-module az.storage -force
+
+      $results =''  
+             $subscriptionlist =  Get-AZSubscription |select  name, ID 
+
+
+Foreach($Subscription in $subscriptionlist)
+{
+
+          $SubscriptionName =  $($Subscription.name)
+             
+             $SubscriptionID =  $($Subscription.ID) 
+
+            set-AZcontext -SubscriptionName  $SubscriptionName
+
+             write-host "$SubscriptionName" -foregroundcolor yellow
+
+            #Get-Command -Module Azure -Noun *Storage*`
+
+
+             $SubscriptionName 
+             $storageaccounts = Get-AZStorageAccount | select StorageAccountName, context, PrimaryEndpoints,AccountType, ProvisioningState ,PrimaryLocation ,Resourcegroupname ,Tags
+
+
+                foreach($storageaccount in $storageaccounts)
+                {    
+                
+                    Set-AZContext -SubscriptionName $SubscriptionName 
+                             
+ 
+                            $StorageAccountName = $storageaccount.StorageAccountName
+                            $storageaccountrg = $storageaccount.resourcegroupname
+                              
+
+                        $allowaccess =      Set-AzStorageAccount -ResourceGroupName $storageaccountrg -Name $StorageAccountName   -AllowSharedKeyAccess $true  -force
+
+
+                              
+                               $stgkey =  (Get-AZStorageAccountKey -Name $StorageAccountName -ResourceGroupName $storageaccountrg -erroraction silentlycontinue)
+  
+                      
+                               # $stgkey.value
+                                $storageacctkeyprimary = ($stgkey.value ) | select -First 1
+                                $storageacctkeySecondary = ($stgkey.value ) | select -skip 1  
+                                $storageacctkeyStorageAccountName = $StorageAccountName
+ 
+ 
+
+                              $storageaccountendpoints = $storageaccount.PrimaryEndpoints
+                              $storageaccountlocation = $storageaccount.PrimaryLocation
+                              $storageaccount_type =  $storageaccount.AccountType
+                              $storeageaccountstatus = $storageaccount.StatusOfPrimary
+                    
+                               # $ctx = $storageaccount.context
+                                $ctx = New-AZStorageContext -StorageAccountName  $StorageAccountName -StorageAccountKey $storageacctkeyprimary 
+                           #    $containers = Get-AzStorageContainer  -context $ctx
+
+
+
+
+                    # Get classic diagnostic settings for a storage account
+                      $CLASSIClogsettings = Get-AzStorageServiceMetricsProperty -ServiceType Blob -MetricsType Hour -Context $ctx
+
+ 
+                     $StorageAccountName 
+
+                              $CLASSIClogsettings | Fl *
+           
+
+           foreach ($log in  $CLASSIClogsettings ) {
+                # Create a PSObject for each log entry
+                $logObj = New-Object PSObject
+                $logObj | Add-Member -MemberType NoteProperty -Name "SubscriptionName" -Value $($SubscriptionName)
+                $logObj | Add-Member -MemberType NoteProperty -Name "ResourceName" -Value $($storageaccount.StorageAccountName)
+                $logObj | Add-Member -MemberType NoteProperty -Name "ResourceType" -Value $($storageaccount.AccountType)
+                $logObj | Add-Member -MemberType NoteProperty -Name "ResourceGroup" -Value $($storageaccount.ResourceGroupName)
+ 
+                $logObj | Add-Member -MemberType NoteProperty -Name "MetricsLevel" -Value $($log.MetricsLevel)
+                $logObj | Add-Member -MemberType NoteProperty -Name "RetentionDays" -Value $($log.RetentionDays)
+                $logObj | Add-Member -MemberType NoteProperty -Name "Version" -Value $($log.Version)
+
+                [array]$results += $logObj
+        }
+     }                
+
+}
+
+# Export results to CSV
+$results | Select SubscriptionName, ResourceName, ResourceType, ResourceGroup,StorageAccountName , StorageAccountId,MetricsLevel, RetentionDays,Version   | Export-Csv -Path "c:\temp\LegacyDiagnosticSettings.csv" -NoTypeInformation
+
+Write-Host "Scan complete. Results saved to LegacyDiagnosticSettings.csv"
+
+
+
+$CSS = @"
+<Title>Diagnostic Classic Logs settings Audit Report: $(Get-Date -Format 'dd MMMM yyyy') - Compliance Status</Title>
+<Header>
+<B>Company Confidential - NSG Audit Report: $(Get-Date -Format 'dd MMMM yyyy')</B> 
+<I>Report generated from {3} on $env:computername {0} by {1}\{2} as a scheduled task</I>
+
+Please contact $contact with any questions "$(Get-Date -displayhint date)",$env:userdomain,$env:username
+</Header>
+<Style>
+th {
+    font: bold 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+    sans-serif;
+    color: #FFFFFF;
+    border-right: 1px solid #C1DAD7;
+    border-bottom: 1px solid #C1DAD7;
+    border-top: 1px solid #C1DAD7;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 6px 6px 6px 12px;
+    background: #5F9EA0;
+}
+td {
+    font: 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+    sans-serif;
+    border-right: 1px solid #C1DAD7;
+    border-bottom: 1px solid #C1DAD7;
+    background: #fff;
+    padding: 6px 6px 6px 12px;
+    color: #0000FF;
+}
+</Style>
+"@
+
+$Diagnostic_report = ($results | Sort-Object -Property SubscriptionName, ResourceName, ResourceType, ResourceGroup,StorageAccountName , StorageAccountId,MetricsLevel, RetentionDays,Version  | ConvertTo-Html -Head $CSS)  
+
+$Diagnostic_report | Out-File c:\temp\diag_classic_logs_settings.html 
+invoke-item  c:\temp\diag_classic_logs_settings.html
+
+
+
+
+
+
+
+
+

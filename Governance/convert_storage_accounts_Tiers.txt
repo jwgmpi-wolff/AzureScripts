@@ -1,0 +1,230 @@
+﻿ 
+<#
+.NOTES
+
+    THIS CODE-SAMPLE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED 
+
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR 
+
+    FITNESS FOR A PARTICULAR PURPOSE.
+
+    This sample is not supported under any Microsoft standard support program or service. 
+
+    The script is provided AS IS without warranty of any kind. Microsoft further disclaims all
+
+    implied warranties including, without limitation, any implied warranties of merchantability
+
+    or of fitness for a particular purpose. The entire risk arising out of the use or performance
+
+    of the sample and documentation remains with you. In no event shall Microsoft, its authors,
+
+    or anyone else involved in the creation, production, or delivery of the script be liable for 
+
+    any damages whatsoever (including, without limitation, damages for loss of business profits, 
+
+    business interruption, loss of business information, or other pecuniary loss) arising out of 
+
+    the use of or inability to use the sample or documentation, even if Microsoft has been advised 
+
+    of the possibility of such damages, rising out of the use of or inability to use the sample script, 
+
+    even if Microsoft has been advised of the possibility of such damages.
+
+    Script Name: convert_storage_accounts_Tiers.ps1
+
+    Description: 
+
+    summary of the PowerShell script:
+
+ Description:  This script is designed to manage and update the access tiers of Azure storage accounts 
+ across multiple subscriptions. Here's a summary of its purpose and actions:
+
+Suppress Warnings: The script begins by setting an environment variable to suppress Azure PowerShell 
+breaking change warnings.
+Connect to Azure: It connects to the Azure account using connect-azaccount.
+Retrieve Subscriptions: The script retrieves all Azure subscriptions associated with the account.
+Iterate Through Subscriptions: For each subscription, it sets the context and retrieves all storage accounts.
+Collect Storage Account Details: It gathers details of each storage account, including subscription name, 
+ID, state, storage account name, resource group name, primary location, SKU name, kind, large file shares, 
+access tier, and HTTPS traffic settings.
+Select Storage Accounts to Convert: The user is prompted to select storage accounts to convert using an Out-GridView (OGV) window.
+Select Access Tier: The user is prompted to select the new access tier (Hot, Cool, or Cold) using another OGV window.
+Update Access Tier: For each selected storage account, the script sets the context to the appropriate 
+subscription and updates the access tier. If the update fails due to access rights, it notifies the user.
+Confirm Changes: It retrieves the updated storage account details and confirms the change by displaying 
+the new access tier.
+Generate Report: The script collects updated storage account details and generates an HTML report of the
+ changes, which is then opened for the user to view.
+This script automates the process of managing and updating storage account access tiers, making it easier 
+to handle multiple subscriptions and storage accounts efficiently.
+ 
+ #>
+ 
+ 
+ 
+ 
+ 
+ 
+   Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings 'true'
+
+
+connect-azaccount
+
+ 
+$subs = Get-AzSubscription  
+
+$subStorageAccounts = ''
+
+   foreach ($sub in $subs) 
+   {
+        Set-AzContext -Subscription $($sub.name)  3>$null
+        $subscriptioname = $($sub.name)  
+        $subscriptionid = $($sub.id)
+        
+        $storageaccountsall = get-azstorageaccount -erroraction ignore
+
+                $subobj = new-object PSOBject
+
+
+      foreach($storageaccount in $storageaccountsall)
+      {
+
+       $subobj = new-object PSOBject
+
+        $subobj | Add-Member -MemberType NoteProperty -Name  Subscriptionname   -Value  $($sub.name) 
+        $subobj | Add-Member -MemberType NoteProperty -Name  ID  -Value  $($sub.id)
+        $subobj | Add-Member -MemberType NoteProperty -Name  State -Value  $($sub.State)
+        $subobj | Add-Member -MemberType NoteProperty -Name  StorageAccountName   -Value  $($storageaccount.StorageAccountName) 
+        $subobj | Add-Member -MemberType NoteProperty -Name  ResourceGroupName  -Value  $($storageaccount.ResourceGroupName)
+        $subobj | Add-Member -MemberType NoteProperty -Name  PrimaryLocation -Value  $($storageaccount.PrimaryLocation)
+        $subobj | Add-Member -MemberType NoteProperty -Name  SkuName   -Value  $($storageaccount.sku.name) 
+        $subobj | Add-Member -MemberType NoteProperty -Name  Kind  -Value  $($storageaccount.Kind)
+        $subobj | Add-Member -MemberType NoteProperty -Name  LargeFileShares -Value  $($storageaccount.LargeFileShares)
+        $subobj | Add-Member -MemberType NoteProperty -Name  AccessTier  -Value  $($storageaccount.AccessTier)
+        $subobj | Add-Member -MemberType NoteProperty -Name  EnableHttpsTrafficOnly -Value  $($storageaccount.EnableHttpsTrafficOnly)     
+
+                [array]$subStorageAccounts += $subobj 
+    }
+ }
+
+
+
+    $storageaccounttoconvert = $($subStorageAccounts)|  Select  Subscriptionname, AccessTier, State, StorageAccountName, ResourceGroupName, PrimaryLocation,SkuName,  Kind, LargeFileShares, EnableHttpsTrafficOnly | ogv -title "Select Storage accounts to convert: " -passthru | Select  *
+
+
+$Storageaccounttiers = "Hot","Cool","Cold" 
+
+$selectedtier = $Storageaccounttiers | ogv -Title " Select the tier to convert to :" -PassThru | select -first 1
+ 
+ foreach($StorageAccounttochange in   $storageaccounttoconvert )
+ {
+           Set-AzContext -Subscription  $($StorageAccounttochange.Subscriptionname) 3>$null
+        # Get the storage account context
+        $storageAccount = Get-AzStorageAccount -Name $($StorageAccounttochange.StorageAccountName) -ResourceGroupName $($StorageAccounttochange.ResourceGroupName)
+
+        # Update the access tier to Cool
+        if(! (Set-AzStorageAccount -ResourceGroupName $($StorageAccounttochange.ResourceGroupName)   -Name $($StorageAccounttochange.StorageAccountName) -AccessTier $($selectedtier) -force -verbose -ErrorAction ignore ) )
+        {
+            Write-host " Access rights preventing change on scope for $($StorageAccounttochange.StorageAccountName) " -BackgroundColor white -ForegroundColor DarkRed
+
+        }
+
+        # Confirm the change
+         $updatedStorageAccount = Get-AzStorageAccount -Name $($StorageAccounttochange.StorageAccountName)  -ResourceGroupName $($StorageAccounttochange.ResourceGroupName)
+
+        Write-host "The access tier for storage account $($StorageAccounttochange.StorageAccountName) is set to '$($updatedStorageAccount.AccessTier)'." -BackgroundColor white -ForegroundColor DarkGreen
+
+ 
+}
+
+
+
+
+
+
+  $date = $(Get-Date -Format 'dd MMMM yyyy' )
+ 
+    $CSS = @"
+<Title> Azure Storage container   Report: $date </Title>
+<Style>
+th {
+	font: bold 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+	sans-serif;
+	color: #FFFFFF;
+	border-right: 1px solid #C1DAD7;
+	border-bottom: 1px solid #C1DAD7;
+	border-top: 1px solid #C1DAD7;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	text-align: left;
+	padding: 6px 6px 6px 12px;
+	background: #5F9EA0;
+}
+td {
+	font: 11px "Trebuchet MS", Verdana, Arial, Helvetica,
+	sans-serif;
+	border-right: 1px solid #C1DAD7;
+	border-bottom: 1px solid #C1DAD7;
+	background: #fff;
+	padding: 6px 6px 6px 12px;
+	color: #6D929B;
+}
+</Style>
+"@
+
+ 
+ 
+ $storageaccountsallupdated = get-azstorageaccount 
+
+          
+$updatesubStorageAccounts = ''
+
+      foreach($storageaccount in $storageaccountsallupdated)
+      {
+
+       $updateobj = new-object PSOBject
+
+        $updateobj | Add-Member -MemberType NoteProperty -Name  Subscriptionname   -Value  $($sub.name) 
+        $updateobj | Add-Member -MemberType NoteProperty -Name  ID  -Value  $($sub.id)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  State -Value  $($sub.State)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  StorageAccountName   -Value  $($storageaccount.StorageAccountName) 
+        $updateobj | Add-Member -MemberType NoteProperty -Name  ResourceGroupName  -Value  $($storageaccount.ResourceGroupName)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  PrimaryLocation -Value  $($storageaccount.PrimaryLocation)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  SkuName   -Value  $($storageaccount.sku.name) 
+        $updateobj | Add-Member -MemberType NoteProperty -Name  Kind  -Value  $($storageaccount.Kind)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  LargeFileShares -Value  $($storageaccount.LargeFileShares)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  AccessTier  -Value  $($storageaccount.AccessTier)
+        $updateobj | Add-Member -MemberType NoteProperty -Name  EnableHttpsTrafficOnly -Value  $($storageaccount.EnableHttpsTrafficOnly)     
+
+                [array]$updatesubStorageAccounts += $updateobj 
+    }
+ 
+
+
+
+    $storageaccounttoconverted = $($updatesubStorageAccounts)|  Select  Subscriptionname, AccessTier, State, StorageAccountName, ResourceGroupName, PrimaryLocation,SkuName,  Kind, LargeFileShares, EnableHttpsTrafficOnly 
+ 
+$AZStoragelist_report = ($storageaccounttoconverted | sort-object subscriptioname   | Select  * |`   
+ConvertTo-Html -Head $CSS )  | out-file "c:\temp\Azure_storage_account_tier_change.html" 
+
+invoke-item "c:\temp\Azure_storage_account_tier_change.html" 
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

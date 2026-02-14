@@ -1,0 +1,29 @@
+{
+  "properties": {
+    "displayName": "block_b2C-creation",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "block b2c tenant creation",
+    "metadata": {
+      "category": "controltenants",
+      "createdBy": "21fab876-a421-4e7c-a0b6-9b3fb509ff85",
+      "createdOn": "2024-02-27T00:41:00.4343689Z",
+      "updatedBy": null,
+      "updatedOn": null
+    },
+    "version": "1.0.0",
+    "parameters": {},
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "equals": "Microsoft.AzureActiveDirectory/b2cDirectories"
+      },
+      "then": {
+        "effect": "Deny"
+      }
+    },
+    "versions": [
+      "1.0.0"
+    ]
+  }
+  }

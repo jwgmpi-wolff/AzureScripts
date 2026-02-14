@@ -1,0 +1,30 @@
+##block resource deletions except for admins
+
+ 
+{
+  "mode": "All",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {
+          "field": "identity.userAssignedIdentities",
+          "notIn": [
+            "1ac32c26-634d-4cb7-8b2c-24e3da1901cc"
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "field": "id",
+              "like": "*/delete"
+            }
+          ]
+        }
+      ]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  },
+  "parameters": {}
+}

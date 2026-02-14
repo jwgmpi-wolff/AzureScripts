@@ -1,0 +1,480 @@
+﻿<#
+The provided PowerShell script is designed to set up service health alerts for Azure subscriptions. Here's a detailed summary of its operations:
+
+Permissions Required:
+
+The script requires specific Azure permissions for ActivityLogAlerts, ActionGroups, and ResourceGroups.
+The "Directory Readers" AAD role is also needed.
+It emphasizes that standard ARM roles like Owner and Contributor can be targeted for email via policy if groups are not involved.
+Initial Setup:
+
+The script imports necessary modules (
+az
+,
+microsoft.graph
+,
+azuread
+,
+az.monitor
+).
+Configures maximum function and variable counts.
+Subscription Selection:
+
+Uses
+Get-AzSubscription
+to fetch Azure subscriptions and displays them for selection using
+Out-GridView
+.
+User selects the subscriptions to host alerts.
+Role Definition:
+
+Defines roles (
+Owner
+,
+Contributor
+) to be considered for receiving health alerts.
+Optionally specifies groups to skip if they shouldn't receive health alerts.
+Random Number Generation:
+
+Generates a random number to ensure unique naming for resources.
+Resource Group Creation Function:
+
+Function
+NEWRGCREATE
+allows users to create a new resource group.
+Prompts users to select a region and assigns specific tags to the resource group.
+Impacted Areas Selection:
+
+Prompts users to select regions to monitor for service health using
+Get-AzLocation
+and
+Out-GridView
+.
+Alert Rule and Action Group Naming:
+
+Defines naming conventions for the alert rule and action group.
+Sets the service health location to "Global".
+Subscription Loop:
+
+For each selected subscription:
+Sets the context to the current subscription.
+Prompts the user to either select an existing resource group or create a new one to hold resources.
+Checks if the selected resource group exists and creates it if necessary.
+For each defined role, retrieves role assignments and processes them:
+If the role is assigned to a group, expands the group to retrieve individual members.
+If the role is assigned to a user, checks for an email attribute.
+Collects unique email addresses for action group recipients.
+Action Group Management:
+
+Checks if the action group already exists:
+If it doesn't exist, creates a new action group with the collected email addresses.
+If it exists and is not set to replace existing members, merges new emails with existing ones and updates the action group.
+Activity Log Alert Management:
+
+Checks if the alert rule already exists:
+If it doesn't exist and the action group creation was successful, creates a new alert rule with conditions to monitor
+the selected impacted regions for service health issues.
+Output:
+
+Provides verbose output and error handling throughout the process to ensure transparency and debugging
+
+In summary, the script automates the creation and management of service health alerts in Azure by leveraging role assignments 
+to dynamically populate action groups with email recipients. It guides the user through selecting subscriptions, resource groups, 
+and impacted regions, ensuring the setup is tailored to their specific requirements.
+
+###################################
+To execute would require the following permissions:
+Microsoft.Insights/ActivityLogAlerts/Read
+Microsoft.Insights/ActivityLogAlerts/Write
+Microsoft.Insights/ActionGroups/Read
+Microsoft.Insights/ActionGroups/Write
+Microsoft.Resources/subscriptions/resourcegroups/Read
+Microsoft.Resources/subscriptions/resourcegroups/Write
+
+Also should have the “Directory Readers” AAD role
+
+NOTE - If you only need standard ARM roles like Owner and Contributor you could instead simply target the ARM role for email via policy, e.g. for the action group targets
+NOTE - This will NOT work if they are groups. If groups have the roles you will need to use this script approach
+ 
+** Note This script is based on a RBAC role assigned. If you use PIM and RBAC assignment is not useful
+it would be easy to change the script to look for a subscription level "Owner" or "Contact" tag you set
+which could then be read and the values added to the action group!
+#>
+
+Connect-azaccount   -environment AzureUSGovernment -Tenant 40a3c411-b2a7-4f7b-a28e-05bf8dd7ab7b -Subscription 639cd93f-befc-4729-ae4c-df719077200c
+
+  'microsoft.graph','azuread','az.monitor','az' | foreach-object {
+
+
+  if((Get-InstalledModule -name $_))
+  { 
+    Write-Host " Module $_ exists  - updating" -ForegroundColor Green
+         update-module $_ -force | out-null
+    }
+    else
+    {
+    write-host "module $_ does not exist - installing" -ForegroundColor red -BackgroundColor white
+     
+        install-module -name $_ -allowclobber | out-null
+        import-module -name $_ -force | out-null
+    }
+   #  Get-InstalledModule
+}
+ 
+  
+
+$MaximumFunctionCount = 16384
+$MaximumVariableCount = 16384
+ #Import-Module Az   -force   
+
+
+ ###### Get az subscription
+ 
+  
+$subs = get-azsubscription  | ogv -title " select subscription(s) to host alerts : " -PassThru | select subscriptionid, name
+
+$roles = @('Owner','Contributor') #These roles at the sub level if have email will be added to an action group to receive service health alerts
+#$roles = @('Contributor') #These roles at the sub level if have email will be added to an action group to receive service health alerts
+
+#Enable one of the following based on if there are specific groups that have roles you DON'T want included in health alerts
+#$groupsToSkip = @('Jl','Avengers')
+$groupsToSkip = @() #if none
+
+### Generate randon number for rule uniqueness
+$randomNumber = Get-Random -Minimum 1 -Maximum 101
+Write-Output $randomNumber
+
+#############################################
+## Resourcegroup create function 
+##################
+function NEWRGCREATE 
+{
+
+            $newrgname  = read-host " select a RG name: " 
+           $location = get-azlocation | ogv -Title " select a region to hold RG :" -PassThru | Select displayname, location
+
+ 
+           $newrg =  New-azresourcegroup -Name "$($newrgname)_DoNoDelete" `
+                -Force -Verbose `
+                -location $($location.location) `
+                -Tag @{owner = 'jerry wolff'  ; Purpose = 'Service health alerts'} `
+            
+            $rg = $newrg 
+ 
+    return $rg
+}
+
+<#
+Function get_supported_servicetypes_names
+ {
+ 
+                # Retrieve the access token
+    $token = Get-AzAccessToken -AsSecureString
+
+    # Define the URI and headers
+  
+    $uri = "https://management.usgovcloudapi.net/providers/Microsoft.ResourceHealth/metadata?api-version=2024-02-01"
+
+    $headers = @{
+        "Authorization" = "Bearer $($token.Token)"
+    }
+
+    # Make the REST API call
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -UseBasicParsing
+    } catch {
+        Write-Error "Failed to retrieve metadata: $_"
+        return
+    }
+
+    # Assuming $response contains the result from the previous REST API call
+    $metadataItems = $response.value
+
+    # Filter for supported services and resource types
+    $supportedServices = $metadataItems | Where-Object { $_.id -eq "/providers/Microsoft.ResourceHealth/metadata/supportedServices" } | Select-Object -Unique
+    $supportedResources = $metadataItems | Where-Object { $_.id -eq "/providers/Microsoft.ResourceHealth/metadata/supportedResourceType" } | Select-Object -Unique
+
+    # Get all resources
+    $resources = Get-AzResource | Select-Object -Unique
+
+    # Map supported services with resources
+    $mappedItems = @()
+    foreach ($service in $supportedServices.properties.supportedValues) {
+        $serviceResources = $resources | Where-Object { $_.ResourceType -eq $($service.resourceTypes) } | Select-Object -Unique
+        $mappedItems += [PSCustomObject]@{
+            Service = $service
+            Resources = $($serviceResources.ResourceType)
+            DisplayName = $($service.displayName)
+            Location = $($serviceResources.Location)
+        }
+    }
+
+    foreach ($resourceType in $supportedResources.properties.supportedValues) {
+        $supportedResources = $resources | Where-Object { $_.ResourceType -eq $($resourceType.id) } | Select-Object -Unique
+        $mappedItems += [PSCustomObject]@{
+            Service = $resourceType
+            Resources = $($resourceType.id)
+            DisplayName = $($resourceType.displayName)
+            Location = $($supportedResources.Location)
+        }
+    }
+$mappedItems
+return $mappedItems
+}
+#>
+################################################
+# Select impacted areas for alerts - only the areas you care about
+$impactedAreas = Get-AzLocation | Out-GridView -Title "Select regions to monitor for service health:" -PassThru | Select-Object DisplayName, Location
+
+$impactedRegions = '"{0}"' -f ($($impactedAreas.Location) -join '","')
+Write-Host "Selected impacted regions list: $impactedRegions"
+
+$impactedRegions
+
+<###########################
+# Service type to monitor
+
+$serviceTypesList = get_supported_servicetypes_names
+$serviceTypes = '"{0}"' -f ($($serviceTypesList.DisplayName) -join '","')
+
+$serviceTypes
+#>
+
+
+
+
+##################################
+
+
+$nameOfAlertRule = "ServiceHealth-AR-DONOTRENAMEORDELETE_$randomNumber"
+$nameOfAlertRuleDesc = "ServiceHealth Alert Rule DO NOT DELETE OR RENAME"
+$nameOfActionGroup =  "Svchlth$randomnumber" 
+
+$nameOfActionGroupShort = "Svchlth$randomNumber" #12 characters or less
+
+
+
+$servicehealthlocation = "Global"
+
+
+#set this to true if the existing action group members should be replaced completely if the action group already exists instead of having new people appended to existing members
+$REPLACENOTADD = $false
+
+ 
+
+foreach ($sub in $subs)
+{
+    $errorFound = $false
+
+    #Set context to target subscription
+    Write-Output "Subscription $($sub.name)"
+    try {
+        Set-AzContext -Subscription $($sub.Name) 
+    }
+    catch {
+        Write-Error "!! Subscription error:"
+        Write-Error $_
+        $errorFound = $true
+    }
+
+    if(!$errorFound) #if no error
+    {
+        $subScope = "/subscriptions/$($sub.SubscriptionId)"
+        $emailsToAdd = @()
+
+        set-azcontext -subscription $($sub.Name) 
+
+
+
+                ## select resourcegroup to hold alert and action group 
+
+                ## RG selection
+
+                $resourcegroupcreate = read-host " Select an existing resourcegroup or create new : (Y/N) "
+
+                switch ($resourcegroupcreate)
+                {
+
+                    "N" {
+            
+                            $rg = NEWRGCREATE 
+                        }
+
+
+                    "Y" {
+
+                             $rg = get-azresourcegroup | ogv -title " select a resourcegroup to hold resources:  " -passthru | Select resourcegroupname
+ 
+                              $rg 
+                    }
+
+
+      
+                }
+
+$nameOfResourceGroup = "$($rg.resourcegroupname)"
+
+        #check the  RG exists
+        $RG = Get-AzResourceGroup -Name $nameOfResourceGroup -ErrorAction SilentlyContinue
+ <#       if($null -eq $RG)
+        {
+            write-output "Creating  resource group $nameOfResourceGroup"
+            New-AzResourceGroup -Name $nameOfResourceGroup -Location $servicehealthlocation
+        }
+        #>
+        foreach($role in $roles)
+        {
+            Write-Verbose "Role $role"
+            #Note this will get all of this role at this scope and CHILD (e.g. also RGs so we have to continue to filter)
+            $members = Get-AzRoleAssignment -Scope $subScope -RoleDefinitionName $role
+            #$members | ft objectType, RoleDefinitionName, DisplayName, SignInName
+
+            foreach ($member in $members) {
+                if($member.scope -eq $subScope) #need to check specific to this sub and not inherited from MG or a child RG
+                {
+
+
+                    Write-Verbose "$sub,$($member.DisplayName),$($member.SignInName),$($contrib.ObjectType)"
+
+                    #Change to support groups and enumerate for members via Get-AzADGroupMember -GroupDisplayName
+                    if($member.ObjectType -eq 'Group')
+                    {
+                        $groupinfo = get-azadgroup -DisplayName  $($member.DisplayName)
+                        #check if the group should be excluded ($groupsToSkip)
+                        #if($groupsToSkip -notcontains $($member.DisplayName))
+                       # {
+                            Write-Verbose "Group found $($member.DisplayName) - Expanding"
+                            $groupMembers = Get-AzADGroupMember -GroupObjectId $($groupinfo.id)
+                            $emailsToAdd += $groupmembers | Where-Object {$_.Mail -ne $null} | select-object -ExpandProperty Mail #we only add if has an email attribute
+                        #}
+                    }
+
+                    #Can also check the email for users incase their email is different from UPN via Get-AzADUser -UserPrincipalName
+                    if($member.ObjectType -eq 'User')
+                    {
+                        Write-Verbose "User found $($member.SignInName) - Checking for email attribute"
+                        $userDetail = Get-AzADUser -UserPrincipalName $member.SignInName
+                        if($null -ne $userDetail.Mail)
+                        {
+                            $emailsToAdd += $userDetail.Mail
+                        }
+                    }
+                }
+            }
+        }
+
+        $emailsToAdd = $emailsToAdd | Select-Object -Unique #Remove duplicated, i.e. if multiple of the roles
+        Write-Verbose "Emails to add: $emailsToAdd"
+        if($null -eq $emailsToAdd)
+        {
+            $emailsToAdd += "jerrywolff@microsoft.com"
+
+        }
+
+        #Look for the Action Group
+        $AGObj = Get-AzActionGroup | Where-Object { $_.Name -eq $nameOfActionGroup }
+        $AGObjFailure = $false
+        if($null -eq $AGObj) #not found
+        {
+            Write-Output "Action Group not found, creating."
+            if($emailsToAdd.Count -gt 0)
+            {
+                #Note there is also the ability to link directly to an ARM role which per the documentation only is if assigned AT THE SUB and NOT inherited
+                $emailReceivers = @()
+                foreach ($email in $emailsToAdd) {
+                    #$emailReceiver = New-AzActionGroupReceiver -EmailReceiver -EmailAddress $email -Name $email
+                  $receivername = New-AzActionGroupEmailReceiverObject    -EmailAddress $email -Name $email
+
+ 
+         
+                    $emailReceivers += $receivername
+                } 
+
+
+                $actiongroup = new-AzActionGroup -ResourceGroupName $nameOfResourceGroup -Name $nameOfActionGroup -GroupShortName  $nameOfActionGroupShort -Location $servicehealthlocation -EmailReceiver  $emailReceivers 
+
+                                ##time to allow action group creation
+
+                start-sleep -Seconds 30
+
+                ##enable Action group
+ 
+                 update-AzActionGroup -ActionGroupName $($actiongroup.Name) -ResourceGroupName $nameOfResourceGroup    -Enabled
+                     
+                
+                
+                $AGObj = Get-AzActionGroup | Where-Object { $_.Name -eq $nameOfActionGroup }
+            }
+            else
+            {
+                Write-Error "!! Could not create action group for subscription $sub as no valid emails found. This will also stop alert rule creation"
+                $AGObjFailure = $true
+            }
+        }
+        else
+        {
+            if(!$REPLACENOTADD)
+            {
+                #Is the list matching the current emails
+                $currentEmails = $AGObj.EmailReceiver | Select-Object -ExpandProperty EmailAddress
+
+                #need to check it is new ones added so side indicator would be => as would be in the emails to add
+                $differences = Compare-Object -ReferenceObject $currentEmails -DifferenceObject $emailsToAdd | Where-Object { $_.SideIndicator -eq "=>"} -ErrorAction Ignore
+                if($null -ne $differences) #if there are differences
+                {
+                    #add them together then find just the unique (we add the existing as could be manually added emails we want to keep)
+                    $emailstoAdd += $currentEmails
+                    $emailsToAdd = $emailsToAdd | Select-Object -Unique
+                }
+            }
+
+            #Now update the action group
+            $emailReceivers = @()
+            foreach ($email in $emailsToAdd) {
+              
+                $emailReceiver = New-AzActionGroupEmailReceiverObject    -EmailAddress $email -Name $email
+                     
+                    $emailReceivers += $emailReceiver
+            }
+
+            try
+            {
+                update-azactionGroup -ResourceGroupName $nameOfResourceGroup -Name $nameOfActionGroup -ShortName $nameOfActionGroupShort -EmailReceiver  $emailReceivers
+            }
+            catch
+            {
+                Write-Error "!! Error updating action group for $sub"
+                Write-Error $_
+                $emailReceivers
+            }
+        }
+
+        #Look for the Alert Rule
+        $ARObj = Get-AzActivityLogAlert | Where-Object { $_.Name -eq $nameOfAlertRule }
+
+
+        #If wanted to find if ANY Alert Rule existed for Service Health and then could add an -and (ANYARSHFound -ne $null) to below condition
+        #$ANYARSHFound = Get-AzActivityLogAlert | Format-List | out-string | select-string "`"equals`": `"ServiceHealth`""
+
+        if(($null -eq $ARObj) -and (!$AGObjFailure)) #not found and not a failure creating the action group
+        {
+            Write-Output "Alert Rule not found, creating."
+            $location = 'Global'
+            $condition1 = New-AzActivityLogAlertAlertRuleAnyOfOrLeafConditionObject -Field 'category' -Equal 'ServiceHealth' 
+            $condition2 = New-AzActivityLogAlertAlertRuleAnyOfOrLeafConditionObject -Field "properties.impactedServices[*].ImpactedRegions[*].RegionName"  -ContainsAny "$impactedregions"
+          
+            $actionGroupsHashTable = @{ Id = $AGObj.Id; WebhookProperty = "" }
+
+ 
+                            New-AzActivityLogAlert -Location $location -Name $nameOfAlertRule -ResourceGroupName $nameOfResourceGroup -Scope $subScope -Action $actionGroupsHashTable -Condition $condition1, $condition2  `
+                -Description $nameOfAlertRuleDesc -Enabled $true 
+        }
+    }
+    Write-Output ""
+}
+
+ 
+
+
+
+

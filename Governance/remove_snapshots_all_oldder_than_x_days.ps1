@@ -1,0 +1,54 @@
+﻿Param
+(
+  
+ [Parameter (Mandatory= $true)]
+ [string] $days
+ 
+)
+
+# Ensures you do not inherit an AzContext in your runbook
+Disable-AzContextAutosave -Scope Process | Out-Null
+connect-azaccount -identity
+
+$SUBSCRIPTIONS = get-azsubscription
+
+   $snapshots_deleted = 0
+
+foreach($subscription in $subscriptions)
+{
+
+        echo Subscription:   $subscription
+        
+ 
+        echo Number of days  $days  
+ 
+    $snapshots_deleted = 0
+
+        set-AzContext -SubscriptionId $($subscription.id) 
+ 
+        $snapshotnames = Get-AzSnapshot
+
+
+
+        #echo snatpshotnames: $snapshotnames
+     
+ 
+        foreach($snapname in $snapshotnames)
+        {
+        if(Get-AzSnapshot -ResourceGroupName $($snapname.resourceGroupname)  -SnapshotName $($snapname.name) | ?{($_.TimeCreated) -lt ([datetime]::UtcNow.AddDays(-$days))}  )#  | Remove-AzSnapshot -force -verbose)
+        {
+
+        $snapshots_deleted += 1
+
+        }
+        else {
+            $snapshot_not_deleted = Get-AzSnapshot -ResourceGroupName $($snapname.resourceGroupname) -SnapshotName $($snapname.name)
+
+            write-output "not deleted:  $snapname" 
+        }
+
+          write-output "Snapshots deleted: " $snapshots_deleted 
+        }
+ 
+
+}
