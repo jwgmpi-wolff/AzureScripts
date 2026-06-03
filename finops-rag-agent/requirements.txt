@@ -1,0 +1,12 @@
+azure-search-documents==11.6.0
+azure-identity==1.15.0
+azure-mgmt-costmanagement==4.0.0
+azure-mgmt-advisor==9.0.0
+azure-mgmt-resourcegraph==8.0.1
+openai==1.14.0
+langchain==0.1.14
+langchain-text-splitters==0.0.1
+python-pptx==0.6.21
+PyPDF2==3.0.1
+pydantic==2.6.0
+requests==2.31.0

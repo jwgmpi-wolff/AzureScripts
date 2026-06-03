@@ -1,0 +1,91 @@
+name: finops-rag-agent
+version: 1.0.0
+description: FinOps RAG Agent for Azure cost optimization and governance recommendations
+
+endpoints:
+  - type: chat
+    name: finops-chat
+    description: Chat interface for FinOps recommendations
+    enabled: true
+
+tools:
+  # RAG Retrieval
+  - name: retrieve_knowledge
+    description: Retrieve relevant documents from FinOps knowledge base
+    enabled: true
+    category: rag
+  
+  # Cost Management
+  - name: get_daily_costs
+    description: Get daily costs for the past 7 days
+    enabled: true
+    category: cost-management
+  
+  - name: get_cost_forecast
+    description: Get cost forecast for the next 30 days
+    enabled: true
+    category: cost-management
+  
+  - name: get_budget_alerts
+    description: Get active budget alerts
+    enabled: true
+    category: cost-management
+  
+  # Azure Advisor
+  - name: get_cost_recommendations
+    description: Get cost optimization recommendations from Azure Advisor
+    enabled: true
+    category: advisor
+  
+  - name: get_reliability_recommendations
+    description: Get reliability recommendations from Azure Advisor
+    enabled: true
+    category: advisor
+  
+  # Resource Graph
+  - name: get_vm_inventory
+    description: Get inventory of all VMs with sizing information
+    enabled: true
+    category: inventory
+  
+  - name: get_unattached_disks
+    description: Find unattached managed disks that can be deleted
+    enabled: true
+    category: inventory
+  
+  - name: get_idle_public_ips
+    description: Find idle public IPs that are not attached to resources
+    enabled: true
+    category: inventory
+  
+  - name: check_tagging_compliance
+    description: Check resources for compliance with required tags
+    enabled: true
+    category: governance
+
+safety_policies:
+  - name: content_safety
+    enabled: true
+    level: high
+  
+  - name: pii_detection
+    enabled: true
+  
+  - name: jailbreak_detection
+    enabled: true
+
+monitoring:
+  enabled: true
+  log_level: INFO
+  trace_requests: true
+  track_tokens: true
+
+deployment:
+  environment: dev
+  region: eastus2
+  instance_size: small
+  max_replicas: 3
+  
+authentication:
+  type: managed_identity
+  allow_anonymous: false

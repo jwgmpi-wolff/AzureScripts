@@ -1,0 +1,61 @@
+name: finops-rag-agent
+version: 1.0.0
+deployment_type: hosted_agent
+framework: custom_python
+
+description: |
+  FinOps RAG Agent powered by Azure OpenAI and AI Search
+  Provides cost optimization recommendations, live Azure insights,
+  and governance guidance based on FinOps best practices.
+
+capabilities:
+  - rag_retrieval: true
+  - live_data_integration: true
+  - cost_analysis: true
+  - recommendations: true
+  - governance_checks: true
+
+knowledge_base:
+  index_name: finops-index
+  documents: 0
+  categories:
+    - aks
+    - vm
+    - sql
+    - governance
+    - cost-optimization
+
+dependencies:
+  - azure-search-documents
+  - azure-identity
+  - azure-mgmt-costmanagement
+  - azure-mgmt-advisor
+  - azure-mgmt-resourcegraph
+  - openai
+  - langchain
+  - python-pptx
+  - PyPDF2
+
+environment:
+  AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+  AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY}
+  SEARCH_ENDPOINT: ${SEARCH_ENDPOINT}
+  SEARCH_API_KEY: ${SEARCH_API_KEY}
+
+evaluation:
+  enabled: true
+  test_queries:
+    - "How can we reduce AKS costs?"
+    - "What's our cost optimization roadmap?"
+    - "Show me RI/Savings Plan opportunities"
+    - "Check tagging compliance"
+    - "What are orphaned resources?"
+
+monitoring:
+  enable_tracing: true
+  log_level: INFO
+  metrics:
+    - request_count
+    - token_usage
+    - response_latency
+    - hallucination_rate
