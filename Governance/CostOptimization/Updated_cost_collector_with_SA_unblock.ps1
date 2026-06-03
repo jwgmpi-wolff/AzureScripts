@@ -1,321 +1,460 @@
 ﻿<#
+.SYNOPSIS
+Azure Billing and Cost Report Collector with Managed Identity Authentication
+
+.DESCRIPTION
+Collects Azure consumption usage details and billing invoices across multiple tenants,
+exports to CSV, and uploads to Azure Storage using Managed Identity.
+
 .NOTES
-
     THIS CODE-SAMPLE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED 
-
     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR 
-
     FITNESS FOR A PARTICULAR PURPOSE.
+#>
 
-    This sample is not supported under any Microsoft standard support program or service. 
+param(
+    [Parameter(Mandatory = $false)]
+    [int]$MonthsToCollect = 12,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$SubscriptionName = 'WolffMSsub',
+    
+    [Parameter(Mandatory = $false)]
+    [string]$ResourceGroupName = 'wolffautomationrg',
+    
+    [Parameter(Mandatory = $false)]
+    [string]$StorageAccountName = 'wolffautosa',
+    
+    [Parameter(Mandatory = $false)]
+    [string]$Region = 'West US',
+    
+    [Parameter(Mandatory = $false)]
+    [string]$OutputPath = [System.IO.Path]::GetTempPath()
+)
 
-    The script is provided AS IS without warranty of any kind. Microsoft further disclaims all
+# ===== SCRIPT CONFIGURATION =====
+Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings 'true'
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'Continue'
 
-    implied warranties including, without limitation, any implied warranties of merchantability
-
-    or of fitness for a particular purpose. The entire risk arising out of the use or performance
-
-    of the sample and documentation remains with you. In no event shall Microsoft, its authors,
-
-    or anyone else involved in the creation, production, or delivery of the script be liable for 
-
-    any damages whatsoever (including, without limitation, damages for loss of business profits, 
-
-    business interruption, loss of business information, or other pecuniary loss) arising out of 
-
-    the use of or inability to use the sample or documentation, even if Microsoft has been advised 
-
-    of the possibility of such damages, rising out of the use of or inability to use the sample script, 
-
-    even if Microsoft has been advised of the possibility of such damages.
-
-#> 
-  Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings 'true'
-
-  $erroractionpreference = 'silentlycontinue'
-
-   
-
-Connect-AzAccount   -identity #-Environment AzureUSGovernment
-
-$tenantlist = get-aztenant | Select-Object -property *  
- 
-$costreport = ''
-
-$today = get-date -format 'yyyyMM'
-$today
-$numberofmonths = 12
-
- $date = ((Get-Date).AddMonths(-$numberofmonths) )
- 
-$datestart = get-date($today) -Format 'yyyyMM'
- 
-
-$invoicerpt = ''
- 
-
-foreach($tenant in $tenantlist)
-{
-
-    set-azcontext -Tenant $($tenant.Id) 
-
-$month = $numberofmonths 
-
-    do
-    {
-          $billing_account = Get-AzBillingAccount  -IncludeAddress
-        
-        $billingmonth = ((Get-Date).AddMonths(-$month)) 
-        $billingdate = get-date($billingmonth ) -Format 'yyyyMM'
-
-        $billingdate
-
-                ####### collect pretaxcost per subscription
-              
-                  $costalls =  Get-AzConsumptionUsageDetail -BillingPeriodName $billingdate  -IncludeAdditionalProperties   
-
-            $a =0
-
-                        $costfields = $costalls | select-object *
-
-                foreach($costield in $costfields)
-                {
-                     $a = $a+1
-
-                    # Determine the completion percentage
-                    $ResourcesCompleted = ($a/$costfields.count) * 100
-                    $Resourceactivity = "costs  - Processing Iteration " + ($a + 1);
-
-                    $costobj = new-object PSObject 
-
-                     $costield.Tags.GetEnumerator() | ForEach-Object {
-
-               #    Write-Output "$($_.key)   = $($_.Value)" 
-                   $costtags = "$($_.key)   = $($_.Value)" 
- 
-                  # $costobj | add-member -membertype Noteproperty -name $($_.key) -value $($_.value)
-
-                   }
-
-                $costobj | add-member -membertype noteproperty -name AccountName           -value $($costield.AccountName)
-                $costobj | add-member -membertype noteproperty -name AdditionalInfo        -value $($costield.AdditionalInfo)
-                $costobj | add-member -membertype noteproperty -name AdditionalProperties  -value $($costield.AdditionalProperties)
-                $costobj | add-member -membertype noteproperty -name BillableQuantity      -value $($costield.BillableQuantity)
-                $costobj | add-member -membertype noteproperty -name BillingPeriodId       -value $($costield.BillingPeriodId)
-                $costobj | add-member -membertype noteproperty -name BillingPeriodName     -value $($costield.BillingPeriodName)
-                $costobj | add-member -membertype noteproperty -name ConsumedService       -value $($costield.ConsumedService)
-                $costobj | add-member -membertype noteproperty -name CostCenter            -value $($costield.CostCenter)
-                $costobj | add-member -membertype noteproperty -name Currency              -value $($costield.Currency)
-                $costobj | add-member -membertype noteproperty -name DepartmentName        -value $($costield.DepartmentName)
-                $costobj | add-member -membertype noteproperty -name Id                    -value $($costield.Id)
-                $costobj | add-member -membertype noteproperty -name InstanceId            -value $($costield.InstanceId)
-                $costobj | add-member -membertype noteproperty -name InstanceLocation      -value $($costield.InstanceLocation)
-                $costobj | add-member -membertype noteproperty -name InstanceName          -value $($costield.InstanceName)
-                $costobj | add-member -membertype noteproperty -name InvoiceId             -value $($costield.InvoiceId)
-                $costobj | add-member -membertype noteproperty -name InvoiceName           -value $($costield.InvoiceName)
-                $costobj | add-member -membertype noteproperty -name IsEstimated           -value $($costield.IsEstimated)
-                $costobj | add-member -membertype noteproperty -name MeterDetails          -value $($costield.MeterDetails)
-                $costobj | add-member -membertype noteproperty -name MeterId               -value $($costield.MeterId)
-                $costobj | add-member -membertype noteproperty -name Name                  -value $($costield.Name)
-                $costobj | add-member -membertype noteproperty -name PretaxCost            -value $($costield.PretaxCost)
-                $costobj | add-member -membertype noteproperty -name Product               -value $($costield.Product)
-                $costobj | add-member -membertype noteproperty -name SubscriptionGuid      -value $($costield.SubscriptionGuid)
-                $costobj | add-member -membertype noteproperty -name SubscriptionName      -value $($costield.SubscriptionName)
-                $costobj | add-member -membertype noteproperty -name Tags                  -value $costtags
-                $costobj | add-member -membertype noteproperty -name Type                  -value $($costield.Type)
-                $costobj | add-member -membertype noteproperty -name UsageEnd              -value $($costield.UsageEnd)
-                $costobj | add-member -membertype noteproperty -name UsageQuantity         -value $($costield.UsageQuantity)
-                $costobj | add-member -membertype noteproperty -name UsageStart            -value $($costield.UsageStart)
-
-                [array]$costreport += $costobj
-
-                        
-
-
-                    }
-            $month = $month -1
-
-        }until ($month -eq  0)
-
- 
-
-        
-
+# ===== LOGGING SETUP =====
+$scriptStartTime = Get-Date
+$scriptName = $MyInvocation.MyCommand.Name
+function Write-Log {
+    param([string]$Message, [ValidateSet('INFO', 'WARNING', 'ERROR')][string]$Level = 'INFO')
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $logMessage = "[$timestamp] [$Level] $Message"
+    Write-Host $logMessage -ForegroundColor $(if ($Level -eq 'ERROR') { 'Red' } elseif ($Level -eq 'WARNING') { 'Yellow' } else { 'Green' })
 }
-                           
-     set-azcontext -Tenant $($tenant.Id) 
 
-       $invoices =  Get-AzBillingInvoice  | select -Property *
-                     $invoice
+Write-Log "Starting Azure Billing Collection Script" 'INFO'
 
-        foreach ($invoice in $invoices)
-        {
-           $Subscriptionname = get-azsubscription -SubscriptionId $($invoice.SubscriptionId)  -TenantId $($tenantlist.Id) | select name
+# ===== AUTHENTICATION =====
+Write-Log "Authenticating with Managed Identity..." 'INFO'
+try {
+    Connect-AzAccount -tenant d06bc698-c2f2-495a-ab7a-a078237ea9ad  -Subscription 3294dabe-8087-47e2-8fab-982030530146 #-Identity -ErrorAction Stop | Out-Null
+    Write-Log "Managed Identity authentication successful" 'INFO'
+} catch {
+    Write-Log "Failed to authenticate with Managed Identity: $_" 'ERROR'
+    throw
+}
 
-                $Invoiceobj = new-object PSObject
+# ===== TENANT AND CONTEXT SETUP =====
+Write-Log "Retrieving tenant information..." 'INFO'
+$tenantList = @(Get-AzTenant -ErrorAction Stop | Select-Object Id, DisplayName, DefaultDomain)
+Write-Log "Found $($tenantList.Count) tenant(s)" 'INFO'
 
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name Name -value $($invoice.name)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name InvoiceDate -value $($invoice.InvoiceDate)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name InvoicePeriodStartDate -value $($invoice.InvoicePeriodStartDate)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name InvoicePeriodEndDate -value $($invoice.InvoicePeriodEndDate)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name Status -value $($invoice.Status)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name SubscriptionId -value $($invoice.SubscriptionId)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name Subscriptionname -value $($Subscriptionname.Name)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name subtotal -value $($invoice.SubTotal)
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name AmountDue -value $($invoice.AmountDue).Value
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name BilledAmount -value $($invoice.BilledAmount).Value
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name TaxAmount -value $($invoice.TaxAmount).Value
-                        $Invoiceobj | Add-Member -MemberType NoteProperty -Name DueDate -value $($invoice.DueDate)                        
-                        
-                                            
-                        [array]$invoicerpt +=  $Invoiceobj 
+# ===== DATA COLLECTION INITIALIZATION =====
+$costReport = [System.Collections.Generic.List[PSObject]]::new()
+$invoiceReport = [System.Collections.Generic.List[PSObject]]::new()
+$today = Get-Date -Format 'yyyyMM'
+ 
+
+# ===== COST COLLECTION FUNCTION =====
+function Collect-ConsumptionDetails {
+    param(
+        [string]$TenantId,
+        [int]$MonthsBack
+    )
+    
+    Write-Log "Collecting consumption details for tenant: $TenantId (last $MonthsBack months)" 'INFO'
+    $localCosts = [System.Collections.Generic.List[PSObject]]::new()
+    
+    Set-AzContext -Tenant $TenantId -ErrorAction Stop | Out-Null
+    
+    $startDate = (Get-Date).AddMonths(-$MonthsBack).Date
+    $endDate = (Get-Date).Date
+    
+    Write-Log "Fetching consumption from $startDate to $endDate" 'INFO'
+    
+    try {
+        # Use date range instead of BillingPeriodName which has API compatibility issues
+        $costs = Get-AzConsumptionUsageDetail -StartDate $startDate -EndDate $endDate -IncludeAdditionalProperties -ErrorAction Stop
+    
+    if ($costs -and $costs.Count -gt 0) {
+        $costCount = @($costs).Count
+        Write-Log "Found $costCount consumption records" 'INFO'
+        
+        # Convert to custom objects efficiently
+        $costs | ForEach-Object {
+            $costItem = $_
+            $tagString = if ($costItem.Tags -and $costItem.Tags.Count -gt 0) {
+                $costItem.Tags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" } | Join-String -Separator '; '
+            } else {
+                ''
+            }
+            
+            $costObject = [PSCustomObject]@{
+                'AccountName'           = $costItem.AccountName
+                'AdditionalInfo'        = $costItem.AdditionalInfo
+                'AdditionalProperties'  = $costItem.AdditionalProperties
+                'BillableQuantity'      = $costItem.BillableQuantity
+                'BillingPeriodId'       = $costItem.BillingPeriodId
+                'BillingPeriodName'     = $costItem.BillingPeriodName
+                'ConsumedService'       = $costItem.ConsumedService
+                'CostCenter'            = $costItem.CostCenter
+                'Currency'              = $costItem.Currency
+                'DepartmentName'        = $costItem.DepartmentName
+                'Id'                    = $costItem.Id
+                'InstanceId'            = $costItem.InstanceId
+                'InstanceLocation'      = $costItem.InstanceLocation
+                'InstanceName'          = $costItem.InstanceName
+                'InvoiceId'             = $costItem.InvoiceId
+                'InvoiceName'           = $costItem.InvoiceName
+                'IsEstimated'           = $costItem.IsEstimated
+                'MeterDetails'          = $costItem.MeterDetails
+                'MeterId'               = $costItem.MeterId
+                'Name'                  = $costItem.Name
+                'PretaxCost'            = $costItem.PretaxCost
+                'Product'               = $costItem.Product
+                'SubscriptionGuid'      = $costItem.SubscriptionGuid
+                'SubscriptionName'      = $costItem.SubscriptionName
+                'Tags'                  = $tagString
+                'Type'                  = $costItem.Type
+                'UsageEnd'              = $costItem.UsageEnd
+                'UsageQuantity'         = $costItem.UsageQuantity
+                'UsageStart'            = $costItem.UsageStart
+            }
+            
+            $localCosts.Add($costObject) | Out-Null
         }
+    } else {
+        Write-Log "No consumption records found for specified period" 'WARNING'
+    }
+    }
+    catch {
+        Write-Log "Error collecting consumption details: $($_.Exception.Message)" 'WARNING'
+        # Return empty list instead of null to avoid AddRange errors
+        return [System.Collections.Generic.List[PSObject]]::new()
+    }
+    
+    return $localCosts
+}
+
+# ===== INVOICE COLLECTION FUNCTION =====
+function Collect-BillingInvoices {
+    param([string]$TenantId)
+    
+    Write-Log "Collecting billing invoices for tenant: $TenantId" 'INFO'
+    $localInvoices = [System.Collections.Generic.List[PSObject]]::new()
+    
+    Set-AzContext -Tenant $TenantId -ErrorAction Stop | Out-Null
+    
+    # Add delay to prevent rate limiting
+    Start-Sleep -Milliseconds 500
+    
+    try {
+        $invoices = Get-AzBillingInvoice -ErrorAction Stop
+        
+        if ($invoices -and $invoices.Count -gt 0) {
+            $invoiceCount = @($invoices).Count
+            Write-Log "Found $invoiceCount invoice(s)" 'INFO'
+            
+            $invoices | ForEach-Object {
+                $invoice = $_
+                try {
+                    $subscription = Get-AzSubscription -SubscriptionId $invoice.SubscriptionId -TenantId $TenantId -ErrorAction SilentlyContinue
+                    
+                    $invoiceObject = [PSCustomObject]@{
+                        'Name'                     = $invoice.Name
+                        'InvoiceDate'              = $invoice.InvoiceDate
+                        'InvoicePeriodStartDate'   = $invoice.InvoicePeriodStartDate
+                        'InvoicePeriodEndDate'     = $invoice.InvoicePeriodEndDate
+                        'Status'                   = $invoice.Status
+                        'SubscriptionId'           = $invoice.SubscriptionId
+                        'SubscriptionName'         = $subscription.Name
+                        'Subtotal'                 = $invoice.SubTotal
+                        'AmountDue'                = $invoice.AmountDue.Value
+                        'BilledAmount'             = $invoice.BilledAmount.Value
+                        'TaxAmount'                = $invoice.TaxAmount.Value
+                        'DueDate'                  = $invoice.DueDate
+                        'TenantId'                 = $TenantId
+                    }
+                    
+                    $localInvoices.Add($invoiceObject) | Out-Null
+                }
+                catch {
+                    Write-Log "Error processing invoice $($invoice.Name): $_" 'WARNING'
+                }
+            }
+        }
+    }
+    catch {
+        Write-Log "Error collecting invoices: $($_.Exception.Message)" 'WARNING'
+        # Return empty list instead of null to avoid AddRange errors
+        return [System.Collections.Generic.List[PSObject]]::new()
+    }
+    
+    return $localInvoices
+}
+
+# ===== COST COLLECTION MAIN LOOP =====
+Write-Log "Starting cost and invoice collection across $($tenantList.Count) tenant(s)..." 'INFO'
+foreach ($tenant in $tenantList) {
+    Write-Log "Processing tenant: $($tenant.DisplayName) ($($tenant.Id))" 'INFO'
+    
+    # Collect costs for this tenant
+    $tenantCosts = Collect-ConsumptionDetails -TenantId $tenant.Id -MonthsBack $MonthsToCollect
+    if ($tenantCosts -and $tenantCosts.Count -gt 0) {
+        $costReport.AddRange($tenantCosts) | Out-Null
+    }
+    
+    # Add delay between API calls to avoid rate limiting
+    Start-Sleep -Milliseconds 1000
+    
+    # Collect invoices for this tenant
+    $tenantInvoices = Collect-BillingInvoices -TenantId $tenant.Id
+    if ($tenantInvoices -and $tenantInvoices.Count -gt 0) {
+        $invoiceReport.AddRange($tenantInvoices) | Out-Null
+    }
+    
+    # Additional delay between tenants
+    if ($tenantList.Count -gt 1) {
+        Start-Sleep -Milliseconds 1000
+    }
+}
+
+Write-Log "Cost collection complete: $($costReport.Count) records collected" 'INFO'
+Write-Log "Invoice collection complete: $($invoiceReport.Count) invoices collected" 'INFO'
   
 
- 
 
-#$costreport
+# ===== EXPORT TO CSV =====
+Write-Log "Exporting data to CSV files..." 'INFO'
 
+$costReportFile = Join-Path -Path $OutputPath -ChildPath "AzureBillingCosts_$today.csv"
+$invoiceReportFile = Join-Path -Path $OutputPath -ChildPath "AzureInvoices_$today.csv"
 
- $resultsfilename = "AzureBillingCosts.csv"
+try {
+    $costReport | Select-Object AccountName, AdditionalInfo, AdditionalProperties, BillableQuantity, `
+        BillingPeriodId, BillingPeriodName, ConsumedService, CostCenter, Currency, DepartmentName, `
+        Id, InstanceId, InstanceLocation, InstanceName, InvoiceId, InvoiceName, IsEstimated, `
+        MeterDetails, MeterId, Name, PretaxCost, Product, SubscriptionGuid, SubscriptionName, `
+        Tags, Type, UsageEnd, UsageQuantity, UsageStart | `
+        Export-Csv -Path $costReportFile -NoTypeInformation -Force -ErrorAction Stop
 
- $resultsfilename2 = "invoices.csv"
- 
+        $costReport | Select-Object AccountName, AdditionalInfo, AdditionalProperties, BillableQuantity, `
+        BillingPeriodId, BillingPeriodName, ConsumedService, CostCenter, Currency, DepartmentName, `
+        Id, InstanceId, InstanceLocation, InstanceName, InvoiceId, InvoiceName, IsEstimated, `
+        MeterDetails, MeterId, Name, PretaxCost, Product, SubscriptionGuid, SubscriptionName, `
+        Tags, Type, UsageEnd, UsageQuantity, UsageStart | `
+        Export-Csv -Path "c:\temp\costsreports" -NoTypeInformation -Force -ErrorAction Stop
+    Write-Log "Cost report exported: $costReportFile" 'INFO'
+}
+catch {
+    Write-Log "Error exporting cost report: $_" 'ERROR'
+    throw
+}
 
-
-$costreport |select `
-AccountName          , `
-AdditionalInfo       , `
-AdditionalProperties , `
-BillableQuantity     , `
-BillingPeriodId      , `
-BillingPeriodName    , `
-ConsumedService      , `
-CostCenter           , `
-Currency             , `
-DepartmentName       , `
-Id                   , `
-InstanceId           , `
-InstanceLocation     , `
-InstanceName         , `
-InvoiceId            , `
-InvoiceName          , `
-IsEstimated          , `
-MeterDetails         , `
-MeterId              , `
-Name                 , `
-PretaxCost           , `
-Product              , `
-SubscriptionGuid     , `
-SubscriptionName     , `
-Tags                 , `
-Type                 , `
-UsageEnd             , `
-UsageQuantity        , `
-UsageStart          | export-csv $resultsfilename  -NoTypeInformation   
-
- 
- 
- 
-$invoicerpt|  Select name, InvoiceDate, InvoicePeriodStartDate, InvoicePeriodEndDate, Status, SubscriptionId,Subscriptionname,subtotal,AmountDue,BilledAmount,TaxAmount, DueDate| export-csv $resultsfilename2  -NoTypeInformation 
-
-
-##### storage subinfo
-
-connect-azaccount 
- 
-
-$Region =  "West US"
-
- $subscriptionselected = 'wolffentpSub'
+try {
+    $invoiceReport | Select-Object Name, InvoiceDate, InvoicePeriodStartDate, InvoicePeriodEndDate, `
+        Status, SubscriptionId, SubscriptionName, Subtotal, AmountDue, BilledAmount, TaxAmount, DueDate, TenantId | `
+        Export-Csv -Path $invoiceReportFile -NoTypeInformation -Force -ErrorAction Stop
+    
+    Write-Log "Invoice report exported: $invoiceReportFile" 'INFO'
+}
+catch {
+    Write-Log "Error exporting invoice report: $_" 'ERROR'
+    throw
+}
 
 
 
-$resourcegroupname = 'wolffautomationrg'
-$subscriptioninfo = get-azsubscription -SubscriptionName $subscriptionselected 
-$TenantID = $subscriptioninfo | Select-Object tenantid
-$storageaccountname = 'wolffautosa'
-$storagecontainer = 'wpicorpbilling'
+# ===== STORAGE SETUP AND UPLOAD FUNCTIONS =====
+function Initialize-StorageAccount {
+    param(
+        [string]$SubscriptionName,
+        [string]$ResourceGroupName,
+        [string]$StorageAccountName,
+        [string]$Region
+    )
+    
+    Write-Log "Setting up storage account: $StorageAccountName" 'INFO'
+    
+    try {
+        # Get subscription and set context
+        $subscription = Get-AzSubscription -SubscriptionName $SubscriptionName -ErrorAction Stop
+        Set-AzContext -Subscription $subscription.Id -ErrorAction Stop | Out-Null
+        Write-Log "Context set to subscription: $SubscriptionName" 'INFO'
+        
+        # Check if storage account exists
+        $storageAccount = Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $StorageAccountName -ErrorAction SilentlyContinue
+        
+        if (-not $storageAccount) {
+            Write-Log "Storage account not found. Creating: $StorageAccountName" 'INFO'
+            New-AzStorageAccount -ResourceGroupName $ResourceGroupName `
+                -Name $StorageAccountName `
+                -Location $Region `
+                -AccessTier Hot `
+                -SkuName Standard_LRS `
+                -Kind BlobStorage `
+                -Tag @{'owner' = 'Azure Automation'; 'purpose' = 'Billing Reports' } `
+                -ErrorAction Stop | Out-Null
+            
+            Write-Log "Storage account created successfully" 'INFO'
+        }
+        else {
+            Write-Log "Storage account already exists" 'INFO'
+        }
+        
+        # Configure storage account for secure access with managed identity
+        Set-AzStorageAccount -ResourceGroupName $ResourceGroupName `
+            -Name $StorageAccountName `
+            -AllowBlobPublicAccess $false `
+            -AllowSharedKeyAccess $false `
+            -ErrorAction Stop | Out-Null
+        
+        Write-Log "Storage account configured for managed identity access" 'INFO'
+        
+        return $storageAccount
+    }
+    catch {
+        Write-Log "Error initializing storage account: $_" 'ERROR'
+        throw
+    }
+}
 
+function Ensure-StorageContainer {
+    param(
+        [string]$ResourceGroupName,
+        [string]$StorageAccountName,
+        [string]$ContainerName
+    )
+    
+    try {
+        # Get storage account context using managed identity
+        $storageAccount = Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $StorageAccountName -ErrorAction Stop
+        $storageContext = $storageAccount.Context
+        Set-AzStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -AllowBlobPublicAccess $true -AllowSharedKeyAccess $true  -force
 
-### end storagesub info
+        # Check if container exists
+        $container = Get-AzStorageContainer -Name $ContainerName -Context $storageContext -ErrorAction SilentlyContinue
+        
+        if (-not $container) {
+            Write-Log "Creating storage container: $ContainerName" 'INFO'
+            New-AzStorageContainer -Name $ContainerName -Context $storageContext -ErrorAction Stop | Out-Null
+            Write-Log "Container created: $ContainerName" 'INFO'
+        }
+        else {
+            Write-Log "Container already exists: $ContainerName" 'INFO'
+        }
+        
+        return $storageContext
+    }
+    catch {
+        Write-Log "Error ensuring storage container: $_" 'ERROR'
+        throw
+    }
+}
 
-set-azcontext -Subscription $($subscriptioninfo.Name)  -Tenant $($TenantID.TenantId)
+function Upload-ReportToStorage {
+    param(
+        [string]$FilePath,
+        [string]$ContainerName,
+        [object]$StorageContext,
+        [string]$BlobName
+    )
+    
+    try {
+        if (-not (Test-Path $FilePath)) {
+            Write-Log "File not found: $FilePath" 'ERROR'
+            throw "File not found: $FilePath"
+        }
+        
+        Write-Log "Uploading $BlobName to container: $ContainerName" 'INFO'
+        
+        Set-AzStorageBlobContent -File $FilePath `
+            -Container $ContainerName `
+            -Blob $BlobName `
+            -Context $StorageContext `
+            -Force `
+            -ErrorAction Stop | Out-Null
+        
+        Write-Log "Successfully uploaded: $BlobName" 'INFO'
+    }
+    catch {
+        Write-Log "Error uploading to storage: $_" 'ERROR'
+        throw
+    }
+}
 
- ## un block storage 
-# Enable Allow Storage Account Key Access
-$scope = "/subscriptions/$($subscriptioninfo.Id)/resourceGroups/$resourcegroupname/providers/Microsoft.Storage/storageAccounts/$storageaccountname"
+# ===== STORAGE UPLOAD MAIN =====
+Write-Log "Beginning storage operations..." 'INFO'
 
-$servicePrincipal = Get-AzADServicePrincipal -DisplayName "$($azcontext.Account)"
+try {
+    # Initialize storage account
+    Initialize-StorageAccount -SubscriptionName $SubscriptionName `
+        -ResourceGroupName $ResourceGroupName `
+        -StorageAccountName $StorageAccountName `
+        -Region $Region
+    
+    # Handle cost reports
+    $costContexts = @('wpicorpbilling', 'wpicorpbilling-archive')
+    foreach ($container in $costContexts) {
+        $context = Ensure-StorageContainer -ResourceGroupName $ResourceGroupName `
+            -StorageAccountName $StorageAccountName `
+            -ContainerName $container
+        
+        Upload-ReportToStorage -FilePath $costReportFile `
+            -ContainerName $container `
+            -StorageContext $context `
+            -BlobName "AzureBillingCosts_$today.csv"
+    }
+    
+    # Handle invoice reports
+    $invoiceContainer = 'invoices'
+    $invoiceContext = Ensure-StorageContainer -ResourceGroupName $ResourceGroupName `
+        -StorageAccountName $StorageAccountName `
+        -ContainerName $invoiceContainer
+    
+    Upload-ReportToStorage -FilePath $invoiceReportFile `
+        -ContainerName $invoiceContainer `
+        -StorageContext $invoiceContext `
+        -BlobName "AzureInvoices_$today.csv"
+    
+    Write-Log "All files uploaded successfully" 'INFO'
+}
+catch {
+    Write-Log "Error during storage operations: $_" 'ERROR'
+    throw
+}
 
-# Display the service principal's Object ID
-$servicePrincipal.Id
+# ===== SCRIPT COMPLETION SUMMARY =====
+$scriptEndTime = Get-Date
+$scriptDuration = $scriptEndTime - $scriptStartTime
 
- 
-
-Set-AzStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname -AllowBlobPublicAccess $true -AllowSharedKeyAccess $true  -force
-
- $destContext = New-AzStorageContext -StorageAccountName "$storageaccountname" -StorageAccountKey ((Get-AzStorageAccountKey -ResourceGroupName "$resourcegroupname" -Name $storageaccountname).Value | select -first 1)
-
-
-#BEGIN Create Storage Accounts
- 
- 
- 
- try
- {
-     if (!(Get-AzStorageAccount -ResourceGroupName $resourcegroupname -Name $storageaccountname ))
-    {  
-        Write-Host "Storage Account Does Not Exist, Creating Storage Account: $storageAccount Now"
-
-       
-        New-AzStorageAccount -ResourceGroupName $resourcegroupname  -Name $storageaccountname -Location $region -AccessTier Hot -SkuName Standard_LRS -Kind BlobStorage -Tag @{"owner" = "Jerry wolff"; "purpose" = "Az Automation storage write" } -Verbose
- 
-     
-        Get-AzStorageAccount -Name   $storageaccountname  -ResourceGroupName  $resourcegroupname  -verbose
-     }
-   }
-   Catch
-   {
-         WRITE-DEBUG "Storage Account Aleady Exists, SKipping Creation of $storageAccount"
-   
-   } 
-        $StorageKey = (Get-AzStorageAccountKey -ResourceGroupName $resourcegroupname  –StorageAccountName $storageaccountname).value | select -first 1
-        $destContext = New-azStorageContext  –StorageAccountName $storageaccountname `
-                                        -StorageAccountKey $StorageKey
-
-
-             #Upload user.csv to storage account
-
-        try
-            {
-                  if (!(get-azstoragecontainer -Name $storagecontainer -Context $destContext))
-                     { 
-                         New-azStorageContainer $storagecontainer -Context $destContext
-                        }
-             }
-        catch
-             {
-                Write-Warning " $storagecontainer container already exists" 
-             }
-       
-
-         Set-azStorageBlobContent -Container $storagecontainer -Blob $resultsfilename  -File $resultsfilename -Context $destContext -Force
-
-
-$storageaccountname = 'wolffautosa'
-$storagecontainer = 'invoices'
-       try
-            {
-                  if (!(get-azstoragecontainer -Name $storagecontainer -Context $destContext))
-                     { 
-                         New-azStorageContainer $storagecontainer -Context $destContext
-                        }
-             }
-        catch
-             {
-                Write-Warning " $storagecontainer container already exists" 
-             }
-       
- 
-          Set-azStorageBlobContent -Container $storagecontainer -Blob $resultsfilename2  -File $resultsfilename2 -Context $destContext -Force
+Write-Log "========================================" 'INFO'
+Write-Log "Script Execution Summary" 'INFO'
+Write-Log "========================================" 'INFO'
+Write-Log "Script Name: $scriptName" 'INFO'
+Write-Log "Start Time: $scriptStartTime" 'INFO'
+Write-Log "End Time: $scriptEndTime" 'INFO'
+Write-Log "Duration: $($scriptDuration.TotalMinutes -as [int]) minutes" 'INFO'
+Write-Log "Tenants Processed: $($tenantList.Count)" 'INFO'
+Write-Log "Cost Records Collected: $($costReport.Count)" 'INFO'
+Write-Log "Invoices Collected: $($invoiceReport.Count)" 'INFO'
+Write-Log "Cost Report File: $costReportFile" 'INFO'
+Write-Log "Invoice Report File: $invoiceReportFile" 'INFO'
+Write-Log "Storage Account: $StorageAccountName" 'INFO'
+Write-Log "========================================" 'INFO'
+Write-Log "Script completed successfully!" 'INFO'
